@@ -1,0 +1,20 @@
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: 1800000
+
+spring:
+  application:
+    name: REMS
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_ID}
+    password: ${DB_PW}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
