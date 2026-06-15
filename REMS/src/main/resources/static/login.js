@@ -6,7 +6,7 @@
 // =====================================================
 
 const CFG = window.APP_CONFIG || {};
-const SUCCESS_REDIRECT = CFG.SUCCESS_REDIRECT || 'index.html';
+const SUCCESS_REDIRECT = CFG.SUCCESS_REDIRECT || 'main.html';
 
 // provider 별 인가 엔드포인트 + config.js 의 client_id 매핑
 const OAUTH = {
