@@ -61,10 +61,10 @@ public class BuildingDTO {
                 .units(new ArrayList<>())
                 .build();
 
-        // 중첩된 호실들을 양방향 연관관계로 연결
+        // 중첩된 호실들을 양방향 연관관계로 연결 (작성자는 건물 소유자와 동일하게)
         if (units != null) {
             for (UnitDTO unitDTO : units) {
-                buildingEntity.addUnit(unitDTO.dtoToEntity());
+                buildingEntity.addUnit(unitDTO.dtoToEntity(owner));
             }
         }
         return buildingEntity;

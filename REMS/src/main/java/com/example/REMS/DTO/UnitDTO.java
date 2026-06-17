@@ -1,6 +1,7 @@
 package com.example.REMS.DTO;
 
 import com.example.REMS.Entity.UnitEntity;
+import com.example.REMS.Entity.UserEntity;
 import lombok.*;
 
 @NoArgsConstructor
@@ -11,6 +12,7 @@ import lombok.*;
 public class UnitDTO {
     private Long id;
     private Long buildingId;    // 소속 건물 id (응답용)
+    private String ownerUid;    // 작성자 uid (응답 표시용, 읽기 전용)
     private int floor;
     private String name;
     private String type;
@@ -28,6 +30,7 @@ public class UnitDTO {
         return new UnitDTO(
                 unitEntity.getId(),
                 unitEntity.getBuilding() != null ? unitEntity.getBuilding().getId() : null,
+                unitEntity.getOwner() != null ? unitEntity.getOwner().getUid() : null,
                 unitEntity.getFloor(),
                 unitEntity.getName(),
                 unitEntity.getType(),
@@ -42,9 +45,11 @@ public class UnitDTO {
                 unitEntity.getMemo());
     }
 
-    public UnitEntity dtoToEntity() {
+    // 작성자(owner)를 지정하여 엔티티로 변환
+    public UnitEntity dtoToEntity(UserEntity owner) {
         return UnitEntity.builder()
                 .id(id)
+                .owner(owner)
                 .floor(floor)
                 .name(name)
                 .type(type)
@@ -58,5 +63,9 @@ public class UnitDTO {
                 .contractEnd(contractEnd)
                 .memo(memo)
                 .build();
+    }
+
+    public UnitEntity dtoToEntity() {
+        return dtoToEntity(null);
     }
 }

@@ -1,6 +1,7 @@
 package com.example.REMS.Entity;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -28,6 +29,12 @@ public class UnitEntity {
 
     @Column(length = 1000)
     private String memo;        // 메모
+
+    // 작성자(소유자) — users 테이블과 N:1 외래키 (owner_id)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id")
+    @JsonIgnore
+    private UserEntity owner;
 
     // 호실 : 건물 = N : 1
     @ManyToOne(fetch = FetchType.LAZY)

@@ -216,7 +216,7 @@ async function initMap() {
     document.getElementById('zoom-in-btn').onclick = () => map.setZoom(map.getZoom() + 1);
     document.getElementById('zoom-out-btn').onclick = () => map.setZoom(map.getZoom() - 1);
     document.getElementById('my-location-btn').onclick = gotoMyLocation;
-    document.getElementById('add-btn-float').onclick = startAddBuilding;
+    document.getElementById('add-btn-float').onclick = toggleMapPicker;
     document.getElementById('map-picker-confirm').onclick = confirmPickerLocation;
 }
 
@@ -469,8 +469,28 @@ function startAddBuilding() {
     document.getElementById('map-picker-bar').classList.add('show');
     document.getElementById('map-picker-crosshair').classList.add('show');
     document.getElementById('map-picker-confirm').classList.add('show');
+    const addBtn = document.getElementById('add-btn-float');
+    addBtn.classList.add('picking');      // + → × (취소 아이콘)
+    addBtn.title = '위치 설정 취소';
     showSheet('');
     document.getElementById('sheet-body').innerHTML = `<div class="empty-state"><div class="empty-state-icon">📍</div><div class="empty-state-title">지도를 이동하여 위치 설정</div><div class="empty-state-sub">건물 위치를 지도 위에서 직접 설정하세요</div></div>`;
+}
+
+// + 버튼 토글: 활성 상태면 취소, 아니면 위치 설정 시작
+function toggleMapPicker() {
+    if (pickerMode) cancelMapPicker();
+    else startAddBuilding();
+}
+
+// 위치 설정(피커) 취소 → 상단 안내바/확인 버튼 숨기고 + 버튼 원래대로
+function cancelMapPicker() {
+    pickerMode = false;
+    document.getElementById('map-picker-bar').classList.remove('show');
+    document.getElementById('map-picker-crosshair').classList.remove('show');
+    document.getElementById('map-picker-confirm').classList.remove('show');
+    const addBtn = document.getElementById('add-btn-float');
+    addBtn.classList.remove('picking');
+    addBtn.title = '건물 추가';
 }
 
 function confirmPickerLocation() {
@@ -480,6 +500,9 @@ function confirmPickerLocation() {
     document.getElementById('map-picker-bar').classList.remove('show');
     document.getElementById('map-picker-crosshair').classList.remove('show');
     document.getElementById('map-picker-confirm').classList.remove('show');
+    const addBtn = document.getElementById('add-btn-float');
+    addBtn.classList.remove('picking');
+    addBtn.title = '건물 추가';
 
     // 네이버 Reverse Geocoding 호출
     naver.maps.Service.reverseGeocode({
@@ -569,7 +592,7 @@ async function saveBuilding(id, lat, lng) {
         renderMarkers();
         updateStats();
         showBuildingList();
-        showSheet('half');
+        showSheet('center');
         showToast(id ? '건물 정보가 수정되었습니다' : '건물이 추가되었습니다');
     } catch (e) {
         showToast('저장 실패: ' + e.message);
@@ -585,7 +608,7 @@ async function deleteBuilding(id) {
         renderMarkers();
         updateStats();
         showBuildingList();
-        showSheet('half');
+        showSheet('center');
         currentBuilding = null;
         showToast('건물이 삭제되었습니다');
     } catch (e) {
@@ -1142,6 +1165,7 @@ async function importNaverJson() {
 // UI HELPERS
 // =====================================================
 function switchTab(tab) {
+    if (pickerMode) cancelMapPicker();   // 다른 탭으로 가면 위치 설정 모드 해제
     activeTab = tab;
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
 
@@ -1149,14 +1173,15 @@ function switchTab(tab) {
     const filterBar = document.getElementById('filter-bar');
 
     if (tab === 'map') {
-        mapWrap.style.display = '';
+        mapWrap.style.visibility = '';
         filterBar.style.display = '';
         showBuildingList();
         showSheet('');
     } else {
-        mapWrap.style.display = 'none';
+        mapWrap.style.visibility = 'hidden';   // 공간은 유지 → 하단 네비가 위로 튀지 않음
         filterBar.style.display = 'none';
         showSheet('full');
+        document.getElementById('bottom-sheet').classList.add('tabview');
         if (tab === 'list') showBuildingList();
         else if (tab === 'stats') showStatsView();
         else if (tab === 'settings') showSettingsView();
