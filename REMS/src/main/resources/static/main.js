@@ -132,8 +132,13 @@ const Api = {
         // FormData 전송 시 Content-Type은 브라우저가 boundary와 함께 자동 설정 → authHeaders()만 사용
         return fetch(`${API_BASE_URL}/building`, { method: 'POST', headers: authHeaders(), body: fd }).then(handleResponse);
     },
-    updateBuilding: (id, dto) =>
-        fetch(`${API_BASE_URL}/building/${getUid()}/${id}`, { method: 'PUT', headers: authHeaders(true), body: JSON.stringify(dto) }).then(handleResponse),
+    updateBuilding: (dto, mediaFile) => {
+        const fd = new FormData();
+        fd.append('uid', getUid());
+        fd.append('buildingData', JSON.stringify(dto));   // dto에 id 포함
+        if (mediaFile) fd.append('mediaData', mediaFile);  // 주면 이미지 교체, 없으면 기존 유지
+        return fetch(`${API_BASE_URL}/building`, { method: 'PUT', headers: authHeaders(), body: fd }).then(handleResponse);
+    },
     deleteBuilding: (id) =>
         fetch(`${API_BASE_URL}/building/delete/${getUid()}/${id}`, { method: 'DELETE', headers: authHeaders() }).then(handleResponse),
     searchBuildings: (keyword) =>
@@ -188,7 +193,8 @@ let activeTab = 'map';
 
 const STATUS_COLOR = { empty: '#dc2626', occupied: '#0d9451', expiring: '#d97706' };
 const STATUS_LABEL = { empty: '공실', occupied: '임차', expiring: '만기임박' };
-const TYPE_EMOJI = { commercial: '🏪', residential: '🏠', office: '🏢', mixed: '🏗️' };
+const TYPE_EMOJI = { house: '🏠', multiplex: '🏘️', officetel: '🏢', commercial: '🏪' };
+const TYPE_LABEL = { house: '단독&다중', multiplex: '다세대', officetel: '오피스텔', commercial: '상가' };
 
 async function initMap() {
     if (!requireAuthOrRedirect()) return;
@@ -285,7 +291,7 @@ function renderMarkers() {
 
 function matchesFilter(b) {
     if (activeFilter === 'all') return true;
-    if (activeFilter === 'residential' || activeFilter === 'commercial' || activeFilter === 'office') {
+    if (['house', 'multiplex', 'officetel', 'commercial'].includes(activeFilter)) {
         return b.type === activeFilter;
     }
     const s = getUnitStats(b);
@@ -417,11 +423,12 @@ function showBuildingDetail(b) {
     const totalDeposit = b.units.filter(u => u.status !== 'empty').reduce((sum, u) => sum + (u.deposit || 0), 0);
 
     document.getElementById('sheet-title').textContent = b.name;
-    document.getElementById('sheet-subtitle').textContent = b.address;
+    document.getElementById('sheet-subtitle').textContent = (b.address || '') + (b.detailAddress ? ' ' + b.detailAddress : '');
 
     const body = document.getElementById('sheet-body');
     body.innerHTML = `
-    ${b.mediaURL ? `<img src="${b.mediaURL}" alt="${b.name}" style="width:100%;max-height:200px;object-fit:cover;border-radius:12px;margin-bottom:12px;" onerror="this.style.display='none'">` : ''}
+    ${b.mediaURL ? `<img src="${b.mediaURL}" alt="${b.name}" class="building-photo" onclick="openImageViewer('${b.mediaURL}')" onerror="this.style.display='none'">` : ''}
+    <div style="margin-bottom:10px;"><span style="display:inline-block;font-size:12px;font-weight:600;color:#1a56db;background:#e8f0fe;padding:3px 10px;border-radius:10px;">${TYPE_EMOJI[b.type] || '🏢'} ${TYPE_LABEL[b.type] || b.type || '유형 미지정'}</span></div>
     <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       ${isMine(b) ? `
       <button onclick="openEditBuilding('${b.id}')" style="padding:7px 14px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:600;color:#374151;cursor:pointer;">✏️ 건물 수정</button>
@@ -429,7 +436,7 @@ function showBuildingDetail(b) {
       ` : `
       <div style="padding:7px 12px;border-radius:8px;background:#f3f4f6;color:#6b7280;font-size:12.5px;font-weight:600;">🔒 ${b.ownerUid || '다른 사용자'}님의 매물 · 조회 전용</div>
       `}
-      <button onclick="showBuildingList();showSheet('half')" style="padding:7px 14px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:600;color:#6b7280;cursor:pointer;">← 목록</button>
+      <button onclick="showBuildingList();showSheet('center')" style="padding:7px 14px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:600;color:#6b7280;cursor:pointer;">← 목록</button>
     </div>
 
     <div class="building-info-grid">
@@ -557,32 +564,34 @@ function openBuildingForm(building, lat, lng, addr) {
     </div>
     <div class="form-group">
       <label class="form-label">주소</label>
-      <input id="f-addr" class="form-input" type="text" placeholder="주소" value="${building ? building.address : (addr || '')}">
+      <input id="f-addr" class="form-input" type="text" placeholder="주소" value="${building ? (building.address || '') : (addr || '')}">
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">층수</label>
-        <input id="f-floors" class="form-input" type="number" min="1" max="50" placeholder="층" value="${building ? building.floors : ''}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">건물 유형</label>
-        <select id="f-type" class="form-select">
-          <option value="commercial" ${building && building.type==='commercial'?'selected':''}>상가</option>
-          <option value="residential" ${building && building.type==='residential'?'selected':''}>주거용</option>
-          <option value="office" ${building && building.type==='office'?'selected':''}>사무용</option>
-          <option value="mixed" ${building && building.type==='mixed'?'selected':''}>복합</option>
-        </select>
-      </div>
+    <div class="form-group">
+      <label class="form-label">상세주소</label>
+      <input id="f-detail" class="form-input" type="text" placeholder="예: 3층 302호, 동/호수 등" value="${building ? (building.detailAddress || '') : ''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">건물 유형</label>
+      <select id="f-type" class="form-select">
+        <option value="house" ${(!building || building.type==='house')?'selected':''}>단독&다중</option>
+        <option value="multiplex" ${building && building.type==='multiplex'?'selected':''}>다세대</option>
+        <option value="officetel" ${building && building.type==='officetel'?'selected':''}>오피스텔</option>
+        <option value="commercial" ${building && building.type==='commercial'?'selected':''}>상가</option>
+      </select>
     </div>
     <div class="form-group">
       <label class="form-label">메모</label>
-      <textarea id="f-memo" class="form-textarea" placeholder="특이사항, 관리 메모 등">${building ? building.memo : ''}</textarea>
+      <textarea id="f-memo" class="form-textarea" placeholder="특이사항, 관리 메모 등">${building ? (building.memo || '') : ''}</textarea>
     </div>
-    ${!isEdit ? `
+    ${(building && building.mediaURL) ? `
     <div class="form-group">
-      <label class="form-label">사진/미디어 (선택)</label>
-      <input id="f-media" class="form-input" type="file" accept="image/*,video/*">
+      <label class="form-label">현재 사진</label>
+      <img src="${building.mediaURL}" alt="현재 이미지" style="width:100%;max-height:160px;object-fit:contain;background:#f3f4f6;border-radius:10px;" onerror="this.style.display='none'">
     </div>` : ''}
+    <div class="form-group">
+      <label class="form-label">사진/미디어 ${isEdit ? '(새로 선택하면 교체)' : '(선택)'}</label>
+      <input id="f-media" class="form-input" type="file" accept="image/*,video/*">
+    </div>
   `;
 
     document.getElementById('modal-footer').innerHTML = `
@@ -607,18 +616,20 @@ async function saveBuilding(id, lat, lng) {
     const dto = {
         name,
         address: document.getElementById('f-addr').value.trim(),
-        floors: parseInt(document.getElementById('f-floors').value) || 1,
+        detailAddress: document.getElementById('f-detail').value.trim(),
         type: document.getElementById('f-type').value,
         memo: document.getElementById('f-memo').value.trim(),
         lat: parseFloat(lat), lng: parseFloat(lng)
     };
 
+    const mediaInput = document.getElementById('f-media');
+    const mediaFile = (mediaInput && mediaInput.files && mediaInput.files[0]) ? mediaInput.files[0] : null;
+
     try {
         if (id) {
-            await Api.updateBuilding(id, dto);
+            dto.id = id;
+            await Api.updateBuilding(dto, mediaFile);   // 새 파일 주면 이미지 교체
         } else {
-            const mediaInput = document.getElementById('f-media');
-            const mediaFile = (mediaInput && mediaInput.files && mediaInput.files[0]) ? mediaInput.files[0] : null;
             await Api.createBuilding(dto, mediaFile);
         }
         await loadData();
@@ -1021,8 +1032,8 @@ function importData(e) {
             // 각 건물을 호실 포함하여 서버에 생성 (BuildingDTO가 중첩 units 지원)
             for (const b of imported.buildings) {
                 const dto = {
-                    name: b.name, address: b.address, type: b.type,
-                    lat: b.lat, lng: b.lng, floors: b.floors, memo: b.memo,
+                    name: b.name, address: b.address, detailAddress: b.detailAddress, type: b.type,
+                    lat: b.lat, lng: b.lng, memo: b.memo,
                     units: (b.units || []).map(u => ({
                         floor: u.floor, name: u.name, type: u.type, status: u.status,
                         area: u.area, tenant: u.tenant, deposit: u.deposit, rent: u.rent,
@@ -1094,11 +1105,12 @@ function convertNaverArticle(raw) {
     const lat = parseFloat(d.latitude || add.latitude) || 0;
     const lng = parseFloat(d.longitude || add.longitude) || 0;
 
-    // 건물 유형 매핑 (상가류 → commercial, 사무실 → office, 나머지 → residential)
+    // 건물 유형 매핑 (상가류 → commercial, 오피스텔 → officetel, 다세대/빌라 → multiplex, 나머지 → house)
     const typeCode = d.realestateTypeCode || add.realEstateTypeCode || '';
-    let btype = 'residential';
+    let btype = 'house';
     if (['SG', 'SMS', 'GM', 'GJCG', 'SUG'].includes(typeCode)) btype = 'commercial';
-    else if (['OPST', 'OR', 'SGJT'].includes(typeCode) && /사무/.test(d.principalUse || '')) btype = 'office';
+    else if (['OPST'].includes(typeCode)) btype = 'officetel';
+    else if (['DSD', 'VL', 'YR', 'DDDG'].includes(typeCode)) btype = 'multiplex';
 
     // 층
     const floorInfo = add.floorInfo || ''; // 예: "3/25"
@@ -1183,7 +1195,7 @@ async function importNaverJson() {
         if (!existing) {
             const created = await Api.createBuilding({
                 name: c.buildingName, address: c.address, type: c.btype,
-                lat: c.lat, lng: c.lng, floors: c.totalFloors, memo: c.buildingMemo,
+                lat: c.lat, lng: c.lng, memo: c.buildingMemo,
                 units: []
             });
             buildingId = String(created.id);
@@ -1296,6 +1308,19 @@ searchInput.addEventListener('input', e => {
 function gotoNaverResult(lat, lng) {
     map.panTo(new naver.maps.LatLng(lat, lng));
     map.setZoom(16);
+}
+
+// 이미지 확대 보기 (라이트박스)
+function openImageViewer(url) {
+    const v = document.getElementById('image-viewer');
+    const img = document.getElementById('image-viewer-img');
+    if (!v || !img) return;
+    img.src = url;
+    v.classList.add('show');
+}
+function closeImageViewer() {
+    const v = document.getElementById('image-viewer');
+    if (v) v.classList.remove('show');
 }
 
 // =====================================================

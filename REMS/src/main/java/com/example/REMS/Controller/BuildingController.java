@@ -22,7 +22,7 @@ public class BuildingController {
 
     private final BuildingService buildingService;
 
-    // 건물 추가 (Post 패턴: uid/buildingData/mediaData 를 multipart 파트로 받음)
+    // 건물 추가 (multipart: uid / buildingData(JSON) / mediaData(파일, 선택))
     @SneakyThrows
     @Operation(summary = "건물 추가")
     @PostMapping(consumes = {MediaType.APPLICATION_JSON_VALUE, MediaType.MULTIPART_FORM_DATA_VALUE})
@@ -70,14 +70,17 @@ public class BuildingController {
         return ResponseEntity.ok(buildingService.findByType(uid, type, userDetails));
     }
 
-    // 건물 수정
+    // 건물 수정 (multipart: uid / buildingData(JSON, id 포함) / mediaData(파일, 선택 — 주면 이미지 교체))
+    @SneakyThrows
     @Operation(summary = "건물 수정")
-    @PutMapping("/{uid}/{id}")
-    public ResponseEntity<BuildingDTO> updateBuilding(@PathVariable("uid") String uid,
-                                                      @PathVariable("id") Long id,
-                                                      @RequestBody BuildingDTO buildingDTO,
+    @PutMapping(consumes = {MediaType.APPLICATION_JSON_VALUE, MediaType.MULTIPART_FORM_DATA_VALUE})
+    public ResponseEntity<BuildingDTO> updateBuilding(@RequestPart("uid") String uid,
+                                                      @RequestPart("buildingData") String buildingData,
+                                                      @RequestPart(value = "mediaData", required = false) MultipartFile mediaData,
                                                       @AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(buildingService.updateBuilding(uid, id, buildingDTO, userDetails));
+        ObjectMapper mapper = new ObjectMapper();
+        BuildingDTO buildingDTO = mapper.readValue(buildingData, BuildingDTO.class);
+        return ResponseEntity.ok(buildingService.updateBuilding(uid, buildingDTO, mediaData, userDetails));
     }
 
     // 건물 삭제 (호실까지 함께 삭제)

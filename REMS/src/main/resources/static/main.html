@@ -99,9 +99,10 @@
             <div class="filter-chip" data-filter="empty">공실</div>
             <div class="filter-chip" data-filter="occupied">임차중</div>
             <div class="filter-chip" data-filter="expiring">만기임박</div>
-            <div class="filter-chip" data-filter="residential">주거용</div>
+            <div class="filter-chip" data-filter="house">단독&다중</div>
+            <div class="filter-chip" data-filter="multiplex">다세대</div>
+            <div class="filter-chip" data-filter="officetel">오피스텔</div>
             <div class="filter-chip" data-filter="commercial">상가</div>
-            <div class="filter-chip" data-filter="office">사무실</div>
         </div>
     </div>
 
@@ -160,6 +161,12 @@
 
 <!-- TOAST -->
 <div id="toast"></div>
+
+<!-- IMAGE VIEWER (이미지 확대 보기) -->
+<div id="image-viewer" onclick="closeImageViewer()">
+    <button id="image-viewer-close" onclick="closeImageViewer()" title="닫기">✕</button>
+    <img id="image-viewer-img" src="" alt="확대 이미지">
+</div>
 
 <script src="config.js?v=1.0.0"></script>
 <script src="main.js?v=1.0.0"></script>

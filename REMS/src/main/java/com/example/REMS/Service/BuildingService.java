@@ -33,36 +33,32 @@ public class BuildingService {
     // GCS 업로드용 (PostService와 동일한 방식)
     private final Storage storage;
     @Value("${google.cloud.credentials.header}")
-    private String googleCloudHeader;          // 공개 URL 접두사 (예: https://storage.googleapis.com/버킷명/)
+    private String googleCloudHeader;          // 공개 URL 접두사
     @Value("${google.cloud.storage.bucket}")
     private String bucket;                      // GCS 버킷명
 
-    // 로그인 여부만 검증 (조회는 모든 로그인 사용자에게 공개)
     private void checkAuth(String uid, UserDetails userDetails) {
         if (userDetails == null || !userDetails.getUsername().equals(uid)) {
             throw new RuntimeException("권한이 없습니다");
         }
     }
 
-    // 토큰 검증 후 UserEntity 반환 (생성 시 작성자 지정에 사용)
     private UserEntity getAuthorizedUser(String uid, UserDetails userDetails) {
         checkAuth(uid, userDetails);
         return userRepository.findByUid(uid)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다"));
     }
 
-    // 수정/삭제 권한: 작성자 본인만
     private void checkOwner(BuildingEntity building, String uid) {
         if (building.getOwner() == null || !building.getOwner().getUid().equals(uid)) {
             throw new RuntimeException("해당 건물에 대한 권한이 없습니다");
         }
     }
 
-    // 미디어 파일을 GCS에 업로드하고 공개 URL 반환 (PostService 패턴)
+    // 미디어 파일을 GCS에 업로드하고 공개 URL 반환
     private String uploadMedia(MultipartFile mediaFile) {
         if (mediaFile == null || mediaFile.isEmpty()) return null;
         try {
-            // UUID로 파일명 중복 방지
             UUID uuid = UUID.randomUUID();
             String original = mediaFile.getOriginalFilename();
             String ext = (original != null && original.contains(".")) ? original.substring(original.lastIndexOf(".")) : "";
@@ -101,7 +97,6 @@ public class BuildingService {
         UserEntity owner = getAuthorizedUser(uid, userDetails);
         BuildingEntity buildingEntity = buildingDTO.dtoToEntity(owner);
 
-        // 미디어 업로드 후 URL 설정
         String mediaURL = uploadMedia(mediaFile);
         if (mediaURL != null) buildingEntity.setMediaURL(mediaURL);
 
@@ -110,7 +105,6 @@ public class BuildingService {
         return BuildingDTO.entityToDto(savedBuilding);
     }
 
-    // 전체 건물 조회 — 모든 로그인 사용자 공개
     @Transactional(readOnly = true)
     public List<BuildingDTO> getAllBuildings(String uid, UserDetails userDetails) {
         checkAuth(uid, userDetails);
@@ -121,7 +115,6 @@ public class BuildingService {
         return buildings;
     }
 
-    // id로 건물 조회 — 공개
     @Transactional(readOnly = true)
     public BuildingDTO findById(String uid, Long id, UserDetails userDetails) {
         checkAuth(uid, userDetails);
@@ -131,18 +124,14 @@ public class BuildingService {
         return BuildingDTO.entityToDto(buildingEntity);
     }
 
-    // 건물명/주소 검색 — 공개
     @Transactional(readOnly = true)
     public List<BuildingDTO> search(String uid, String keyword, UserDetails userDetails) {
         checkAuth(uid, userDetails);
-        List<BuildingDTO> buildings = buildingRepository.searchAll(keyword).stream()
+        return buildingRepository.searchAll(keyword).stream()
                 .map(BuildingDTO::entityToDto)
                 .collect(Collectors.toList());
-        logger.info("'{}' 검색 결과 {}건 (요청자: {})", keyword, buildings.size(), uid);
-        return buildings;
     }
 
-    // 건물 유형별 필터 — 공개
     @Transactional(readOnly = true)
     public List<BuildingDTO> findByType(String uid, String type, UserDetails userDetails) {
         checkAuth(uid, userDetails);
@@ -151,21 +140,27 @@ public class BuildingService {
                 .collect(Collectors.toList());
     }
 
-    // 건물 수정 — 작성자 본인만
+    // 건물 수정 — 작성자 본인만 (미디어 파일을 새로 주면 이미지 교체, 없으면 기존 유지)
     @Transactional
-    public BuildingDTO updateBuilding(String uid, Long id, BuildingDTO buildingDTO, UserDetails userDetails) {
+    public BuildingDTO updateBuilding(String uid, BuildingDTO buildingDTO, MultipartFile mediaFile, UserDetails userDetails) {
         checkAuth(uid, userDetails);
-        BuildingEntity buildingEntity = buildingRepository.findById(id)
+        BuildingEntity buildingEntity = buildingRepository.findById(buildingDTO.getId())
                 .orElseThrow(() -> new IllegalArgumentException("건물을 찾을 수 없습니다"));
         checkOwner(buildingEntity, uid);
+
         buildingEntity.setName(buildingDTO.getName());
         buildingEntity.setAddress(buildingDTO.getAddress());
+        buildingEntity.setDetailAddress(buildingDTO.getDetailAddress());
         buildingEntity.setType(buildingDTO.getType());
         buildingEntity.setLat(buildingDTO.getLat());
         buildingEntity.setLng(buildingDTO.getLng());
-        buildingEntity.setFloors(buildingDTO.getFloors());
         buildingEntity.setMemo(buildingDTO.getMemo());
-        logger.info("{}번 건물 수정 완료! 작성자: {}", id, uid);
+
+        // 새 미디어 파일이 있으면 교체, 없으면 기존 이미지 유지
+        String newMedia = uploadMedia(mediaFile);
+        if (newMedia != null) buildingEntity.setMediaURL(newMedia);
+
+        logger.info("{}번 건물 수정 완료! 작성자: {}, mediaChanged={}", buildingEntity.getId(), uid, newMedia != null);
         return BuildingDTO.entityToDto(buildingEntity);
     }
 

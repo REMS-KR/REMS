@@ -16,13 +16,13 @@ public class BuildingDTO {
     private Long id;
     private String name;
     private String address;
-    private String type;
+    private String detailAddress;   // 상세주소
+    private String type;            // house/multiplex/officetel/commercial
     private double lat;
     private double lng;
-    private int floors;
     private String memo;
-    private String ownerUid;    // 작성자 uid (응답 표시용, 읽기 전용)
-    private String mediaURL;    // 대표 이미지/미디어 URL
+    private String ownerUid;        // 작성자 uid (응답 표시용, 읽기 전용)
+    private String mediaURL;        // 대표 이미지/미디어 URL
 
     // 프론트 오브젝트처럼 호실 목록을 중첩해서 담는다
     @Builder.Default
@@ -38,26 +38,26 @@ public class BuildingDTO {
                 buildingEntity.getId(),
                 buildingEntity.getName(),
                 buildingEntity.getAddress(),
+                buildingEntity.getDetailAddress(),
                 buildingEntity.getType(),
                 buildingEntity.getLat(),
                 buildingEntity.getLng(),
-                buildingEntity.getFloors(),
                 buildingEntity.getMemo(),
                 ownerUid,
                 buildingEntity.getMediaURL(),
                 unitDTOs);
     }
 
-    // 소유자(owner)를 지정하여 엔티티로 변환 (Post 패턴: dtoToEntity(userEntity))
+    // 소유자(owner)를 지정하여 엔티티로 변환
     public BuildingEntity dtoToEntity(UserEntity owner) {
         BuildingEntity buildingEntity = BuildingEntity.builder()
                 .id(id)
                 .name(name)
                 .address(address)
+                .detailAddress(detailAddress)
                 .type(type)
                 .lat(lat)
                 .lng(lng)
-                .floors(floors)
                 .memo(memo)
                 .mediaURL(mediaURL)
                 .owner(owner)
