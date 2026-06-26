@@ -554,7 +554,9 @@ function confirmPickerLocation() {
 }
 
 // ===== 건물 이미지(여러 장) 관리 =====
+const MAX_BUILDING_IMAGES = 10;   // 건물당 첨부 가능한 최대 이미지 수
 let bfKeepUrls = [];   // 건물 수정 시 "유지할" 기존 이미지 URL 목록
+let bfNewFiles = [];   // 새로 추가한 파일(File) 목록
 
 // 건물 상세 이미지 갤러리 — 가로 스와이프 캐러셀 (스크롤 스냅 + 점 인디케이터)
 function renderGallery(b) {
@@ -607,24 +609,55 @@ function renderBfExisting() {
 function removeBfImage(idx) {
     bfKeepUrls.splice(idx, 1);
     renderBfExisting();
+    updateBfCount();
 }
 
-// 폼: 새로 선택한 파일 미리보기
+// 폼: 파일 선택 시 누적 추가 (최대 MAX_BUILDING_IMAGES 장 제한)
+function addBfFiles(e) {
+    const picked = Array.from((e.target && e.target.files) ? e.target.files : []);
+    const room = MAX_BUILDING_IMAGES - (bfKeepUrls.length + bfNewFiles.length);
+    if (room <= 0) {
+        showToast(`최대 ${MAX_BUILDING_IMAGES}장만 첨부 가능합니다`);
+        e.target.value = '';
+        return;
+    }
+    if (picked.length > room) {
+        showToast(`최대 ${MAX_BUILDING_IMAGES}장만 첨부 가능합니다 (지금 ${room}장까지 추가)`);
+    }
+    bfNewFiles = bfNewFiles.concat(picked.slice(0, room));
+    e.target.value = '';   // 같은 파일 재선택 가능 + 선택 누적
+    renderBfNewPreview();
+    updateBfCount();
+}
+
+// 폼: 새로 추가한 파일 미리보기 (✕로 제거)
 function renderBfNewPreview() {
-    const input = document.getElementById('f-media');
     const box = document.getElementById('bf-new-preview');
     if (!box) return;
-    const files = (input && input.files) ? Array.from(input.files) : [];
-    box.innerHTML = files.map(f => `
+    box.innerHTML = bfNewFiles.map((f, i) => `
       <div class="bf-thumb">
         <img src="${URL.createObjectURL(f)}">
+        <button type="button" class="bf-thumb-del" onclick="removeBfNewFile(${i})">✕</button>
         <span class="bf-thumb-new">NEW</span>
       </div>`).join('');
+}
+
+function removeBfNewFile(idx) {
+    bfNewFiles.splice(idx, 1);
+    renderBfNewPreview();
+    updateBfCount();
+}
+
+// 현재 첨부 수 라벨 갱신 (기존 유지 + 신규)
+function updateBfCount() {
+    const el = document.getElementById('bf-count');
+    if (el) el.textContent = (bfKeepUrls.length + bfNewFiles.length) + ' / ' + MAX_BUILDING_IMAGES;
 }
 
 function openBuildingForm(building, lat, lng, addr) {
     const isEdit = !!building;
     bfKeepUrls = (building && building.mediaURLs) ? building.mediaURLs.slice() : [];
+    bfNewFiles = [];
     document.getElementById('modal-title').textContent = isEdit ? '건물 수정' : '건물 추가';
 
     document.getElementById('modal-body').innerHTML = `
@@ -670,8 +703,8 @@ function openBuildingForm(building, lat, lng, addr) {
       <div id="bf-existing" class="bf-thumb-wrap"></div>
     </div>` : ''}
     <div class="form-group">
-      <label class="form-label">사진/미디어 추가 <span style="font-weight:400;color:#9ca3af;">(여러 장 선택 가능)</span></label>
-      <input id="f-media" class="form-input" type="file" accept="image/*,video/*" multiple onchange="renderBfNewPreview()">
+      <label class="form-label">사진/미디어 <span style="font-weight:400;color:#9ca3af;">(최대 ${MAX_BUILDING_IMAGES}장 · <span id="bf-count">0 / ${MAX_BUILDING_IMAGES}</span>)</span></label>
+      <input id="f-media" class="form-input" type="file" accept="image/*,video/*" multiple onchange="addBfFiles(event)">
       <div id="bf-new-preview" class="bf-thumb-wrap"></div>
     </div>
   `;
@@ -683,6 +716,7 @@ function openBuildingForm(building, lat, lng, addr) {
   `;
 
     renderBfExisting();   // 수정 시 기존 이미지 썸네일 표시
+    updateBfCount();
     showModal();
 }
 
@@ -707,9 +741,12 @@ async function saveBuilding(id, lat, lng) {
         lat: parseFloat(lat), lng: parseFloat(lng)
     };
 
-    const mediaInput = document.getElementById('f-media');
-    const mediaFiles = (mediaInput && mediaInput.files) ? Array.from(mediaInput.files) : [];
-    dto.mediaURLs = bfKeepUrls;   // 유지할 기존 이미지 목록 (제거된 건 빠져있음). 신규는 mediaFiles로 업로드
+    const mediaFiles = bfNewFiles;            // 새로 추가한 파일들
+    dto.mediaURLs = bfKeepUrls;               // 유지할 기존 이미지 목록 (제거된 건 빠져있음)
+    if (bfKeepUrls.length + mediaFiles.length > MAX_BUILDING_IMAGES) {
+        showToast(`최대 ${MAX_BUILDING_IMAGES}장만 첨부 가능합니다`);
+        return;
+    }
 
     try {
         if (id) {

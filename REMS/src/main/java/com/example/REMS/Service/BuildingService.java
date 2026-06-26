@@ -5,6 +5,7 @@ import com.example.REMS.Entity.BuildingEntity;
 import com.example.REMS.Entity.UserEntity;
 import com.example.REMS.Repository.BuildingRepository;
 import com.example.REMS.Repository.UserRepository;
+import com.example.REMS.Exception.ImageLimitExceededException;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
 public class BuildingService {
 
     private static final Logger logger = LoggerFactory.getLogger(BuildingService.class);
+    private static final int MAX_IMAGES = 10;   // 건물당 첨부 가능한 최대 이미지 수
     private final BuildingRepository buildingRepository;
     private final UserRepository userRepository;
 
@@ -103,10 +105,26 @@ public class BuildingService {
         return urls;
     }
 
+    // 비어있지 않은 파일 개수
+    private int countFiles(List<MultipartFile> mediaFiles) {
+        if (mediaFiles == null) return 0;
+        int n = 0;
+        for (MultipartFile f : mediaFiles) {
+            if (f != null && !f.isEmpty()) n++;
+        }
+        return n;
+    }
+
     // 건물 추가 (작성자 = 토큰의 사용자, 미디어 파일 여러 장 선택)
     @Transactional
     public BuildingDTO createBuilding(String uid, BuildingDTO buildingDTO, List<MultipartFile> mediaFiles, UserDetails userDetails) {
         UserEntity owner = getAuthorizedUser(uid, userDetails);
+
+        // 장수 제한 검사 (업로드 전에 차단)
+        if (countFiles(mediaFiles) > MAX_IMAGES) {
+            throw new ImageLimitExceededException("사진은 최대 " + MAX_IMAGES + "장까지만 첨부할 수 있습니다.");
+        }
+
         BuildingEntity buildingEntity = buildingDTO.dtoToEntity(owner);
 
         // 새로 업로드한 이미지로 목록 구성
@@ -178,6 +196,12 @@ public class BuildingService {
 
         // 유지할 기존 이미지 + 새로 업로드한 이미지 병합
         List<String> keep = (buildingDTO.getMediaURLs() != null) ? buildingDTO.getMediaURLs() : new ArrayList<>();
+
+        // 장수 제한 검사 (유지목록 + 신규파일, 업로드 전에 차단)
+        if (keep.size() + countFiles(mediaFiles) > MAX_IMAGES) {
+            throw new ImageLimitExceededException("사진은 최대 " + MAX_IMAGES + "장까지만 첨부할 수 있습니다.");
+        }
+
         List<String> added = uploadMediaList(mediaFiles);
 
         List<String> merged = new ArrayList<>();

@@ -23,7 +23,7 @@ spring:
   server:
     tomcat:
       max-http-form-post-size: 20MB # form-data POST 요청에서 허용하는 최대 크기 (multipart/form-data 포함)
-      max-swallow-size: 20MB        # 업로드 중 문제가 생겨서 요청이 중단되었을 때, Tomcat이 내부적으로 버릴 수 있는 최대 데이터 크기, 파일 업로드 시 에러 방지를 위해 함께 설정함
+      max-swallow-size: -1            # 초과분을 끝까지 읽어줘야 413 메시지가 정상 전달됨 (-1 = 무제한)
 
   application:
     name: REMS
