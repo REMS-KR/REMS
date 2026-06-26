@@ -32,7 +32,14 @@ public class BuildingEntity {
     @Column(length = 1000)
     private String memo;            // 메모 (UI에서는 숨김, 데이터는 보존)
 
-    private String mediaURL;        // 대표 이미지/미디어 URL (GCS 업로드 결과)
+    // 이미지/미디어 URL 목록 (GCS 업로드 결과) — 여러 장 첨부 지원
+    // building_media 테이블에 (building_id, sort_order, media_url) 로 저장됨
+    @ElementCollection
+    @CollectionTable(name = "building_media", joinColumns = @JoinColumn(name = "building_id"))
+    @OrderColumn(name = "sort_order")
+    @Column(name = "media_url", length = 1000)
+    @Builder.Default
+    private List<String> mediaURLs = new ArrayList<>();
 
     // 작성자(소유자) — users 테이블과 N:1 외래키 (owner_id)
     @ManyToOne(fetch = FetchType.LAZY)

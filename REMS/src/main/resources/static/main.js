@@ -124,19 +124,19 @@ const Api = {
         fetch(`${API_BASE_URL}/building/all/${getUid()}`, { headers: authHeaders() }).then(handleResponse),
     getBuilding: (id) =>
         fetch(`${API_BASE_URL}/building/id/${getUid()}/${id}`, { headers: authHeaders() }).then(handleResponse),
-    createBuilding: (dto, mediaFile) => {
+    createBuilding: (dto, mediaFiles) => {
         const fd = new FormData();
         fd.append('uid', getUid());                       // @RequestPart("uid") String
         fd.append('buildingData', JSON.stringify(dto));   // @RequestPart("buildingData") String
-        if (mediaFile) fd.append('mediaData', mediaFile);  // @RequestPart("mediaData") MultipartFile (선택)
+        (mediaFiles || []).forEach(f => fd.append('mediaData', f));  // @RequestPart("mediaData") List<MultipartFile> (여러 장, 선택)
         // FormData 전송 시 Content-Type은 브라우저가 boundary와 함께 자동 설정 → authHeaders()만 사용
         return fetch(`${API_BASE_URL}/building`, { method: 'POST', headers: authHeaders(), body: fd }).then(handleResponse);
     },
-    updateBuilding: (dto, mediaFile) => {
+    updateBuilding: (dto, mediaFiles) => {
         const fd = new FormData();
         fd.append('uid', getUid());
-        fd.append('buildingData', JSON.stringify(dto));   // dto에 id 포함
-        if (mediaFile) fd.append('mediaData', mediaFile);  // 주면 이미지 교체, 없으면 기존 유지
+        fd.append('buildingData', JSON.stringify(dto));   // dto.mediaURLs = 유지할 기존 이미지 목록, dto.id 포함
+        (mediaFiles || []).forEach(f => fd.append('mediaData', f));  // 새로 추가 업로드할 파일들
         return fetch(`${API_BASE_URL}/building`, { method: 'PUT', headers: authHeaders(), body: fd }).then(handleResponse);
     },
     deleteBuilding: (id) =>
@@ -427,7 +427,7 @@ function showBuildingDetail(b) {
 
     const body = document.getElementById('sheet-body');
     body.innerHTML = `
-    ${b.mediaURL ? `<img src="${b.mediaURL}" alt="${b.name}" class="building-photo" onclick="openImageViewer('${b.mediaURL}')" onerror="this.style.display='none'">` : ''}
+    ${renderGallery(b)}
     <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       ${isMine(b) ? `
       <button onclick="openEditBuilding('${b.id}')" style="padding:7px 14px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:600;color:#374151;cursor:pointer;">✏️ 건물 수정</button>
@@ -553,8 +553,51 @@ function confirmPickerLocation() {
     });
 }
 
+// ===== 건물 이미지(여러 장) 관리 =====
+let bfKeepUrls = [];   // 건물 수정 시 "유지할" 기존 이미지 URL 목록
+
+// 건물 상세/목록의 이미지 갤러리 (여러 장 세로 나열)
+function renderGallery(b) {
+    const arr = (b && b.mediaURLs) ? b.mediaURLs : [];
+    if (!arr.length) return '';
+    return '<div class="building-gallery">' + arr.map(u =>
+        `<img src="${u}" alt="${(b.name || '').replace(/"/g, '&quot;')}" class="building-photo" onclick="openImageViewer('${u}')" onerror="this.style.display='none'">`
+    ).join('') + '</div>';
+}
+
+// 폼: 유지 중인 기존 이미지 썸네일 (X로 제거)
+function renderBfExisting() {
+    const box = document.getElementById('bf-existing');
+    if (!box) return;
+    if (!bfKeepUrls.length) { box.innerHTML = '<div class="bf-empty">기존 사진 없음</div>'; return; }
+    box.innerHTML = bfKeepUrls.map((u, i) => `
+      <div class="bf-thumb">
+        <img src="${u}" onerror="this.parentElement.style.display='none'">
+        <button type="button" class="bf-thumb-del" onclick="removeBfImage(${i})">✕</button>
+      </div>`).join('');
+}
+
+function removeBfImage(idx) {
+    bfKeepUrls.splice(idx, 1);
+    renderBfExisting();
+}
+
+// 폼: 새로 선택한 파일 미리보기
+function renderBfNewPreview() {
+    const input = document.getElementById('f-media');
+    const box = document.getElementById('bf-new-preview');
+    if (!box) return;
+    const files = (input && input.files) ? Array.from(input.files) : [];
+    box.innerHTML = files.map(f => `
+      <div class="bf-thumb">
+        <img src="${URL.createObjectURL(f)}">
+        <span class="bf-thumb-new">NEW</span>
+      </div>`).join('');
+}
+
 function openBuildingForm(building, lat, lng, addr) {
     const isEdit = !!building;
+    bfKeepUrls = (building && building.mediaURLs) ? building.mediaURLs.slice() : [];
     document.getElementById('modal-title').textContent = isEdit ? '건물 수정' : '건물 추가';
 
     document.getElementById('modal-body').innerHTML = `
@@ -594,14 +637,15 @@ function openBuildingForm(building, lat, lng, addr) {
         <input id="f-manage" class="form-input" type="number" min="0" placeholder="예: 5" value="${building ? (building.manage || '') : ''}">
       </div>
     </div>
-    ${(building && building.mediaURL) ? `
+    ${isEdit ? `
     <div class="form-group">
-      <label class="form-label">현재 사진</label>
-      <img src="${building.mediaURL}" alt="현재 이미지" style="width:100%;max-height:160px;object-fit:contain;background:#f3f4f6;border-radius:10px;" onerror="this.style.display='none'">
+      <label class="form-label">현재 사진 <span style="font-weight:400;color:#9ca3af;">(✕ 눌러 제거)</span></label>
+      <div id="bf-existing" class="bf-thumb-wrap"></div>
     </div>` : ''}
     <div class="form-group">
-      <label class="form-label">사진/미디어 ${isEdit ? '(새로 선택하면 교체)' : '(선택)'}</label>
-      <input id="f-media" class="form-input" type="file" accept="image/*,video/*">
+      <label class="form-label">사진/미디어 추가 <span style="font-weight:400;color:#9ca3af;">(여러 장 선택 가능)</span></label>
+      <input id="f-media" class="form-input" type="file" accept="image/*,video/*" multiple onchange="renderBfNewPreview()">
+      <div id="bf-new-preview" class="bf-thumb-wrap"></div>
     </div>
   `;
 
@@ -611,6 +655,7 @@ function openBuildingForm(building, lat, lng, addr) {
     <button class="btn-primary" onclick="saveBuilding('${isEdit ? building.id : ''}', ${lat||building?.lat}, ${lng||building?.lng})">저장</button>
   `;
 
+    renderBfExisting();   // 수정 시 기존 이미지 썸네일 표시
     showModal();
 }
 
@@ -636,14 +681,15 @@ async function saveBuilding(id, lat, lng) {
     };
 
     const mediaInput = document.getElementById('f-media');
-    const mediaFile = (mediaInput && mediaInput.files && mediaInput.files[0]) ? mediaInput.files[0] : null;
+    const mediaFiles = (mediaInput && mediaInput.files) ? Array.from(mediaInput.files) : [];
+    dto.mediaURLs = bfKeepUrls;   // 유지할 기존 이미지 목록 (제거된 건 빠져있음). 신규는 mediaFiles로 업로드
 
     try {
         if (id) {
             dto.id = id;
-            await Api.updateBuilding(dto, mediaFile);   // 새 파일 주면 이미지 교체
+            await Api.updateBuilding(dto, mediaFiles);   // 유지목록 + 새 파일들
         } else {
-            await Api.createBuilding(dto, mediaFile);
+            await Api.createBuilding(dto, mediaFiles);
         }
         await loadData();
         closeModal();

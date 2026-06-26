@@ -25,7 +25,12 @@ public class BuildingDTO {
     private int manage;             // 관리비 (만원)
     private String memo;
     private String ownerUid;        // 작성자 uid (응답 표시용, 읽기 전용)
-    private String mediaURL;        // 대표 이미지/미디어 URL
+
+    // 이미지 URL 목록
+    //  - 응답(엔티티→DTO): 현재 저장된 이미지 전체
+    //  - 수정 요청(DTO→서비스): "유지할 기존 이미지" 목록 (UI에서 제거한 건 빠진 상태로 옴)
+    @Builder.Default
+    private List<String> mediaURLs = new ArrayList<>();
 
     @Builder.Default
     private List<UnitDTO> units = new ArrayList<>();
@@ -35,6 +40,10 @@ public class BuildingDTO {
                 .map(UnitDTO::entityToDto)
                 .collect(Collectors.toList());
         String ownerUid = (buildingEntity.getOwner() != null) ? buildingEntity.getOwner().getUid() : null;
+
+        List<String> mediaURLs = (buildingEntity.getMediaURLs() != null)
+                ? new ArrayList<>(buildingEntity.getMediaURLs())
+                : new ArrayList<>();
 
         return new BuildingDTO(
                 buildingEntity.getId(),
@@ -49,7 +58,7 @@ public class BuildingDTO {
                 buildingEntity.getManage(),
                 buildingEntity.getMemo(),
                 ownerUid,
-                buildingEntity.getMediaURL(),
+                mediaURLs,
                 unitDTOs);
     }
 
@@ -66,7 +75,7 @@ public class BuildingDTO {
                 .rent(rent)
                 .manage(manage)
                 .memo(memo)
-                .mediaURL(mediaURL)
+                .mediaURLs(mediaURLs != null ? new ArrayList<>(mediaURLs) : new ArrayList<>())
                 .owner(owner)
                 .units(new ArrayList<>())
                 .build();

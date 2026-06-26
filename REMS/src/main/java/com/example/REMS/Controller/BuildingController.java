@@ -22,13 +22,13 @@ public class BuildingController {
 
     private final BuildingService buildingService;
 
-    // 건물 추가 (multipart: uid / buildingData(JSON) / mediaData(파일, 선택))
+    // 건물 추가 (multipart: uid / buildingData(JSON) / mediaData(파일 여러 개, 선택))
     @SneakyThrows
     @Operation(summary = "건물 추가")
     @PostMapping(consumes = {MediaType.APPLICATION_JSON_VALUE, MediaType.MULTIPART_FORM_DATA_VALUE})
     public ResponseEntity<BuildingDTO> createBuilding(@RequestPart("uid") String uid,
                                                       @RequestPart("buildingData") String buildingData,
-                                                      @RequestPart(value = "mediaData", required = false) MultipartFile mediaData,
+                                                      @RequestPart(value = "mediaData", required = false) List<MultipartFile> mediaData,
                                                       @AuthenticationPrincipal UserDetails userDetails) {
         ObjectMapper mapper = new ObjectMapper();
         BuildingDTO buildingDTO = mapper.readValue(buildingData, BuildingDTO.class);
@@ -70,13 +70,13 @@ public class BuildingController {
         return ResponseEntity.ok(buildingService.findByType(uid, type, userDetails));
     }
 
-    // 건물 수정 (multipart: uid / buildingData(JSON, id 포함) / mediaData(파일, 선택 — 주면 이미지 교체))
+    // 건물 수정 (multipart: uid / buildingData(JSON, id + 유지할 mediaURLs 포함) / mediaData(새 파일 여러 개, 선택))
     @SneakyThrows
     @Operation(summary = "건물 수정")
     @PutMapping(consumes = {MediaType.APPLICATION_JSON_VALUE, MediaType.MULTIPART_FORM_DATA_VALUE})
     public ResponseEntity<BuildingDTO> updateBuilding(@RequestPart("uid") String uid,
                                                       @RequestPart("buildingData") String buildingData,
-                                                      @RequestPart(value = "mediaData", required = false) MultipartFile mediaData,
+                                                      @RequestPart(value = "mediaData", required = false) List<MultipartFile> mediaData,
                                                       @AuthenticationPrincipal UserDetails userDetails) {
         ObjectMapper mapper = new ObjectMapper();
         BuildingDTO buildingDTO = mapper.readValue(buildingData, BuildingDTO.class);

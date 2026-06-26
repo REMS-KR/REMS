@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -55,7 +56,7 @@ public class BuildingService {
         }
     }
 
-    // 미디어 파일을 GCS에 업로드하고 공개 URL 반환
+    // 미디어 파일 1개를 GCS에 업로드하고 공개 URL 반환 (빈 파일이면 null)
     private String uploadMedia(MultipartFile mediaFile) {
         if (mediaFile == null || mediaFile.isEmpty()) return null;
         try {
@@ -91,17 +92,30 @@ public class BuildingService {
         }
     }
 
-    // 건물 추가 (작성자 = 토큰의 사용자, 미디어 파일 선택)
+    // 미디어 파일 여러 개 업로드 → URL 목록 (빈 파일/null은 건너뜀)
+    private List<String> uploadMediaList(List<MultipartFile> mediaFiles) {
+        List<String> urls = new ArrayList<>();
+        if (mediaFiles == null) return urls;
+        for (MultipartFile file : mediaFiles) {
+            String url = uploadMedia(file);
+            if (url != null) urls.add(url);
+        }
+        return urls;
+    }
+
+    // 건물 추가 (작성자 = 토큰의 사용자, 미디어 파일 여러 장 선택)
     @Transactional
-    public BuildingDTO createBuilding(String uid, BuildingDTO buildingDTO, MultipartFile mediaFile, UserDetails userDetails) {
+    public BuildingDTO createBuilding(String uid, BuildingDTO buildingDTO, List<MultipartFile> mediaFiles, UserDetails userDetails) {
         UserEntity owner = getAuthorizedUser(uid, userDetails);
         BuildingEntity buildingEntity = buildingDTO.dtoToEntity(owner);
 
-        String mediaURL = uploadMedia(mediaFile);
-        if (mediaURL != null) buildingEntity.setMediaURL(mediaURL);
+        // 새로 업로드한 이미지로 목록 구성
+        List<String> uploaded = uploadMediaList(mediaFiles);
+        buildingEntity.getMediaURLs().clear();
+        buildingEntity.getMediaURLs().addAll(uploaded);
 
         BuildingEntity savedBuilding = buildingRepository.save(buildingEntity);
-        logger.info("건물 등록 완료! 작성자: {}, id={}, media={}", uid, savedBuilding.getId(), mediaURL);
+        logger.info("건물 등록 완료! 작성자: {}, id={}, 이미지 {}장", uid, savedBuilding.getId(), uploaded.size());
         return BuildingDTO.entityToDto(savedBuilding);
     }
 
@@ -140,9 +154,12 @@ public class BuildingService {
                 .collect(Collectors.toList());
     }
 
-    // 건물 수정 — 작성자 본인만 (미디어 파일을 새로 주면 이미지 교체, 없으면 기존 유지)
+    // 건물 수정 — 작성자 본인만
+    //  - buildingDTO.mediaURLs : 유지할 기존 이미지 URL 목록 (UI에서 제거한 건 빠져있음)
+    //  - mediaFiles            : 새로 추가 업로드할 파일들
+    //  → 최종 이미지 = 유지목록 + 신규 업로드
     @Transactional
-    public BuildingDTO updateBuilding(String uid, BuildingDTO buildingDTO, MultipartFile mediaFile, UserDetails userDetails) {
+    public BuildingDTO updateBuilding(String uid, BuildingDTO buildingDTO, List<MultipartFile> mediaFiles, UserDetails userDetails) {
         checkAuth(uid, userDetails);
         BuildingEntity buildingEntity = buildingRepository.findById(buildingDTO.getId())
                 .orElseThrow(() -> new IllegalArgumentException("건물을 찾을 수 없습니다"));
@@ -159,11 +176,20 @@ public class BuildingService {
         buildingEntity.setManage(buildingDTO.getManage());
         buildingEntity.setMemo(buildingDTO.getMemo());
 
-        // 새 미디어 파일이 있으면 교체, 없으면 기존 이미지 유지
-        String newMedia = uploadMedia(mediaFile);
-        if (newMedia != null) buildingEntity.setMediaURL(newMedia);
+        // 유지할 기존 이미지 + 새로 업로드한 이미지 병합
+        List<String> keep = (buildingDTO.getMediaURLs() != null) ? buildingDTO.getMediaURLs() : new ArrayList<>();
+        List<String> added = uploadMediaList(mediaFiles);
 
-        logger.info("{}번 건물 수정 완료! 작성자: {}, mediaChanged={}", buildingEntity.getId(), uid, newMedia != null);
+        List<String> merged = new ArrayList<>();
+        merged.addAll(keep);
+        merged.addAll(added);
+
+        // 영속 컬렉션을 직접 비우고 다시 채워야 @ElementCollection 이 안전하게 갱신됨
+        buildingEntity.getMediaURLs().clear();
+        buildingEntity.getMediaURLs().addAll(merged);
+
+        logger.info("{}번 건물 수정 완료! 작성자: {}, 유지 {}장 + 신규 {}장 = 총 {}장",
+                buildingEntity.getId(), uid, keep.size(), added.size(), merged.size());
         return BuildingDTO.entityToDto(buildingEntity);
     }
 
