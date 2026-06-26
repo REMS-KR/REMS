@@ -556,13 +556,40 @@ function confirmPickerLocation() {
 // ===== 건물 이미지(여러 장) 관리 =====
 let bfKeepUrls = [];   // 건물 수정 시 "유지할" 기존 이미지 URL 목록
 
-// 건물 상세/목록의 이미지 갤러리 (여러 장 세로 나열)
+// 건물 상세 이미지 갤러리 — 가로 스와이프 캐러셀 (스크롤 스냅 + 점 인디케이터)
 function renderGallery(b) {
     const arr = (b && b.mediaURLs) ? b.mediaURLs : [];
     if (!arr.length) return '';
-    return '<div class="building-gallery">' + arr.map(u =>
-        `<img src="${u}" alt="${(b.name || '').replace(/"/g, '&quot;')}" class="building-photo" onclick="openImageViewer('${u}')" onerror="this.style.display='none'">`
-    ).join('') + '</div>';
+    const gid = 'gal-' + (b && b.id ? b.id : Math.random().toString(36).slice(2));
+    const safeName = (b && b.name ? b.name : '').replace(/"/g, '&quot;');
+
+    const slides = arr.map(u => `
+      <div class="gal-slide">
+        <img src="${u}" alt="${safeName}" onclick="openImageViewer('${u}')" onerror="this.parentElement.style.display='none'">
+      </div>`).join('');
+
+    // 이미지가 2장 이상일 때만 카운터/점 표시
+    const counter = arr.length > 1 ? `<div class="gal-counter" id="${gid}-cnt">1 / ${arr.length}</div>` : '';
+    const dots = arr.length > 1
+        ? `<div class="gal-dots" id="${gid}-dots">${arr.map((_, i) => `<span class="gal-dot${i === 0 ? ' active' : ''}"></span>`).join('')}</div>`
+        : '';
+
+    return `<div class="gallery-wrap">
+      <div class="gal-track" id="${gid}" onscroll="onGalleryScroll('${gid}', ${arr.length})">${slides}</div>
+      ${counter}
+      ${dots}
+    </div>`;
+}
+
+// 캐러셀 스크롤 위치 → 카운터/점 인디케이터 갱신
+function onGalleryScroll(gid, total) {
+    const track = document.getElementById(gid);
+    if (!track || !track.clientWidth) return;
+    const idx = Math.round(track.scrollLeft / track.clientWidth);
+    const cnt = document.getElementById(gid + '-cnt');
+    if (cnt) cnt.textContent = (idx + 1) + ' / ' + total;
+    const dots = document.getElementById(gid + '-dots');
+    if (dots) Array.from(dots.children).forEach((d, i) => d.classList.toggle('active', i === idx));
 }
 
 // 폼: 유지 중인 기존 이미지 썸네일 (X로 제거)
