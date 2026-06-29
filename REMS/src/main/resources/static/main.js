@@ -608,8 +608,14 @@ function showBuildingList() {
     body.innerHTML = state.buildings.map(b => {
         const s = getUnitStats(b);
         const pct = s.total > 0 ? Math.round((s.occupied / s.total) * 100) : 0;
+        const emoji = TYPE_EMOJI[b.type] || '🏢';
+        // 실제 오브젝트에 첨부된 첫 번째 이미지를 썸네일로 사용 (없거나 로드 실패 시 타입 이모지)
+        const firstImg = (b.mediaURLs && b.mediaURLs.length) ? b.mediaURLs[0] : '';
+        const thumb = firstImg
+            ? `<div class="building-thumb has-img"><img src="${firstImg}" alt="" loading="lazy" onerror="this.remove();this.parentElement.classList.remove('has-img')"><span class="building-thumb-emoji">${emoji}</span></div>`
+            : `<div class="building-thumb"><span class="building-thumb-emoji">${emoji}</span></div>`;
         return `<div class="building-list-item" onclick="selectBuilding('${b.id}')">
-      <div class="building-thumb">${TYPE_EMOJI[b.type] || '🏢'}</div>
+      ${thumb}
       <div style="flex:1;min-width:0;">
         <div class="building-list-name">${b.name}</div>
         <div class="building-list-addr">${b.address}</div>
@@ -1607,6 +1613,8 @@ function switchTab(tab) {
 
 // ===== 몰입 모드 — 지도 탭에서 지도를 누르면 상/하단 메뉴가 위아래로 사라짐 =====
 function setImmersive(on) {
+    // 웹(데스크톱) 모드에서는 몰입 모드(상/하단 숨김)를 쓰지 않음 — 패널/지도/헤더 항상 표시
+    if (document.documentElement.classList.contains('mode-web')) return;
     const app = document.getElementById('app');
     if (app) app.classList.toggle('chrome-hidden', on);
     if (on) closeFilterPanel();
@@ -1835,3 +1843,42 @@ async function showMapFallback() {
 // PWA: offline support hint
 window.addEventListener('online', () => showToast('인터넷에 연결되었습니다'));
 window.addEventListener('offline', () => showToast('오프라인 모드 — 데이터는 로컬에 저장됩니다'));
+// =====================================================
+// 반응형 모드 — 앱(모바일/PWA) vs 웹(데스크톱)
+//  · 설치형 PWA(standalone) 또는 좁은 화면  → 앱 모드 (기존 모바일 UI 그대로)
+//  · 넓은 데스크톱 브라우저               → 웹 모드 (좌측 패널 + 우측 지도)
+//  · <html> 에 mode-web / mode-app 클래스를 토글하고, CSS 가 레이아웃을 분기한다.
+// =====================================================
+(function initResponsiveMode() {
+    const WEB_MIN_WIDTH = 1024;   // 이 폭 이상 + 비-PWA 일 때만 웹 레이아웃
+
+    function isStandalone() {
+        return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+            || window.navigator.standalone === true;   // iOS 홈화면 추가 앱
+    }
+    function isWeb() {
+        return !isStandalone() && window.innerWidth >= WEB_MIN_WIDTH;
+    }
+    function apply() {
+        const root = document.documentElement;
+        const web = isWeb();
+        const changed = root.classList.contains('mode-web') !== web;
+        root.classList.toggle('mode-web', web);
+        root.classList.toggle('mode-app', !web);
+        // 모드가 바뀌면 현재 탭 내용을 다시 그려 레이아웃/썸네일을 새로 반영
+        if (changed) {
+            try {
+                if (typeof activeTab !== 'undefined' && activeTab === 'stats' && typeof showStatsView === 'function') showStatsView();
+                else if (typeof activeTab !== 'undefined' && activeTab === 'settings' && typeof showSettingsView === 'function') showSettingsView();
+                else if (typeof showBuildingList === 'function') showBuildingList();
+            } catch (e) { /* 초기 로드 시점 등은 무시 */ }
+        }
+    }
+
+    apply();   // main.js 파싱 시점에 1차 적용 (initMap 보다 먼저 클래스 확정)
+    let t;
+    window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(apply, 150); });
+    if (window.matchMedia) {
+        try { window.matchMedia('(display-mode: standalone)').addEventListener('change', apply); } catch (e) {}
+    }
+})();
