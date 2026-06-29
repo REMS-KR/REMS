@@ -222,9 +222,9 @@ async function initMap() {
             pickerLatlng = e.coord; // 네이버는 e.coord에 좌표가 담깁니다.
             return;
         }
-        // 시트가 열려 있으면 닫고, 아니면(지도 탭) 상/하단 UI 토글(몰입 모드)
+        // 시트가 펼쳐져 있으면 peek로 내리고, 아니면(어느 탭이든) 상/하단 메뉴 토글(몰입 모드)
         if (Sheet.isOpen()) { Sheet.dismiss(); return; }
-        if (activeTab === 'map') toggleImmersive();
+        toggleImmersive();
     });
 
     await loadData(true);
@@ -722,6 +722,7 @@ function startAddBuilding() {
     const addBtn = document.getElementById('add-btn-float');
     addBtn.classList.add('picking');      // + → × (취소 아이콘)
     addBtn.title = '위치 설정 취소';
+    document.getElementById('app').classList.add('picker-active'); // 상단바 숨기고 검색창을 그 자리에
     Sheet.hardClose();                    // 위치 설정 중엔 시트를 완전히 내려 지도를 비움
     document.getElementById('sheet-body').innerHTML = `<div class="empty-state"><div class="empty-state-icon">📍</div><div class="empty-state-title">지도를 이동하여 위치 설정</div><div class="empty-state-sub">건물 위치를 지도 위에서 직접 설정하세요</div></div>`;
 }
@@ -743,6 +744,7 @@ function cancelMapPicker() {
     const addBtn = document.getElementById('add-btn-float');
     addBtn.classList.remove('picking');
     addBtn.title = '건물 추가';
+    document.getElementById('app').classList.remove('picker-active'); // 상단바 복원
     showBuildingList();
     Sheet.collapse();                     // 취소하면 목록을 다시 살짝 띄움(peek)
 }
@@ -759,6 +761,7 @@ function confirmPickerLocation() {
     const addBtn = document.getElementById('add-btn-float');
     addBtn.classList.remove('picking');
     addBtn.title = '건물 추가';
+    document.getElementById('app').classList.remove('picker-active'); // 상단바 복원
 
     // 네이버 Reverse Geocoding 호출
     naver.maps.Service.reverseGeocode({

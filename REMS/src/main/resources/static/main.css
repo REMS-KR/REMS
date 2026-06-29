@@ -632,19 +632,31 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 400;
     transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.map-float-controls, #add-btn-float { transition: opacity 0.3s ease, transform 0.25s; }
+.map-float-controls, #add-btn-float { transition: opacity 0.3s ease, transform 0.25s, bottom 0.4s cubic-bezier(0.4,0,0.2,1); }
 
 /* 위치 설정(피커) 오버레이가 떠 있는 상단바보다 위에 오도록 */
 #map-picker-bar { z-index: 300; }
 #map-picker-search { z-index: 301; }
 #map-picker-confirm { z-index: 410; }
 
+/* 매물 생성(위치 설정) 중: 상단바(로고/검색/필터/로그아웃)를 숨기고
+   그 자리에 주소 검색창을 띄움. 안내바는 검색창 바로 아래로 */
+#app.picker-active #topbar { opacity: 0; pointer-events: none; transform: translateY(-8px); }
+#app.picker-active #map-picker-search {
+    top: calc(env(safe-area-inset-top, 0px) + 8px); left: 12px; right: 12px;
+}
+#app.picker-active #map-picker-bar {
+    top: calc(env(safe-area-inset-top, 0px) + 60px);
+    background: rgba(26,86,219,0.95);
+}
+
 /* 2) 몰입 모드 — 지도 클릭 시 상단은 위로, 하단은 아래로 슬라이드 아웃 */
 #app.chrome-hidden #topbar { transform: translateY(-130%); }
 #app.chrome-hidden #bottom-nav { transform: translateY(130%); }
 #app.chrome-hidden #bottom-sheet { transform: translateY(120%) !important; }  /* peek도 잠시 숨김 */
-#app.chrome-hidden .map-float-controls,
-#app.chrome-hidden #add-btn-float { opacity: 0; pointer-events: none; }
+/* 몰입 모드에서도 현위치/확대/축소/매물추가 버튼은 유지하고, 사라진 하단 메뉴 자리로 내려 배치 */
+#app.chrome-hidden .map-float-controls { bottom: max(26px, env(safe-area-inset-bottom)); opacity: 1; pointer-events: auto; }
+#app.chrome-hidden #add-btn-float { bottom: max(26px, env(safe-area-inset-bottom)); opacity: 1; pointer-events: auto; }
 
 /* 2-1) 현재 위치 마커 — 네이버 지도앱 스타일(파란 점 + 방향 부채꼴 + 정확도 펄스) */
 .geo-loc-marker { position: relative; width: 44px; height: 44px; }
