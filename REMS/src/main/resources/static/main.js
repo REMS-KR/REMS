@@ -374,6 +374,9 @@ async function initMap() {
         toggleImmersive();
     });
 
+    // 사용자가 직접 지도를 움직이면, 뒤늦게 도착한 현재위치로 화면이 튀지 않도록 자동 센터링 취소
+    naver.maps.Event.addListener(map, 'dragstart', function () { _suppressAutoCenter = true; });
+
     await loadData(true);
     renderMarkers();
     updateStats();
@@ -390,13 +393,17 @@ async function initMap() {
     // 현재 위치 추적 시작(파란 점). iOS가 아니면 나침반도 바로 연결
     startGeolocationTracking();
     if (!(typeof DeviceOrientationEvent !== 'undefined' &&
-          typeof DeviceOrientationEvent.requestPermission === 'function')) {
+        typeof DeviceOrientationEvent.requestPermission === 'function')) {
         ensureOrientationPermission();
     }
+
+    // 처음 진입 시: 현재 위치로 지도 중심 이동 (권한 거부/실패 시 기본 서울 중심 유지)
+    centerOnCurrentLocationOnce();
 }
 
 function gotoMyLocation() {
     ensureOrientationPermission();           // iOS: 사용자 제스처에서 나침반 권한 요청
+    _suppressAutoCenter = true;              // 버튼으로 직접 이동하면 자동 센터링은 더 이상 불필요
     if (!navigator.geolocation) { showToast('위치 권한이 필요합니다'); return; }
     navigator.geolocation.getCurrentPosition(pos => {
         const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
@@ -407,6 +414,20 @@ function gotoMyLocation() {
     if (geoWatchId == null) startGeolocationTracking();
 }
 
+// 처음 지도 로드 시 1회: 현재 위치를 받아 지도 중심을 그 위치로 이동.
+// 사용자가 이미 지도를 움직였다면(_suppressAutoCenter) 화면을 가로채지 않는다.
+function centerOnCurrentLocationOnce() {
+    if (!navigator.geolocation || !map) return;
+    navigator.geolocation.getCurrentPosition(pos => {
+            if (_suppressAutoCenter) return;     // 그 사이 사용자가 지도를 조작했으면 중단
+            const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+            updateGeoMarker(latlng, pos.coords.heading);
+            map.setCenter(latlng);
+            map.setZoom(16);
+        }, () => { /* 거부/실패 → 기본 서울 중심 유지 */ },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+}
+
 // =====================================================
 // 현재 위치 + 방향(나침반) — 네이버 지도앱 스타일
 // =====================================================
@@ -414,6 +435,7 @@ let geoMarker = null;
 let geoWatchId = null;
 let geoHeading = 0;
 let _oriAsked = false;
+let _suppressAutoCenter = false;   // 사용자가 지도를 직접 움직이면 초기 자동 센터링 취소
 
 // 지도 로드시 현재 위치 추적 시작 → 파란 점 + 방향 부채꼴 표시
 function startGeolocationTracking() {
@@ -493,6 +515,28 @@ function ensureOrientationPermission() {
     }
 }
 
+// 금액(만원) → "X.X억" / "X천만" 표기. 불필요한 .0 은 제거.
+function formatEok(manwon) {
+    if (!manwon || manwon <= 0) return '';
+    if (manwon >= 10000) {                       // 1억 이상 → 억 단위
+        const eok = Math.round((manwon / 10000) * 10) / 10;   // 소수 1자리 반올림
+        return (Number.isInteger(eok) ? String(eok) : eok.toFixed(1)) + '억';
+    }
+    return manwon.toLocaleString() + '만';        // 1억 미만 → 만원 그대로
+}
+
+// 마커/요약용 가격 라벨. 보증금/월세 형태("2.4억/50") 또는 단일 금액("16.3억").
+// 관리비(manage)는 표시하지 않는다.
+function formatPriceLabel(b) {
+    const dep = b.deposit || 0;
+    const rent = b.rent || 0;
+    const depStr = formatEok(dep);
+    if (rent > 0) {                              // 월세 있음 → 보증금/월세
+        return depStr ? `${depStr}/${rent}` : `월 ${rent}`;
+    }
+    return depStr;                               // 매매·전세 등 단일 금액
+}
+
 function renderMarkers() {
     overlays.forEach(o => o.setMap(null));
     overlays = [];
@@ -503,6 +547,7 @@ function renderMarkers() {
         const unitStats = getUnitStats(b);
         const dominant = unitStats.empty > 0 ? 'empty' : (unitStats.expiring > 0 ? 'expiring' : 'occupied');
         const color = STATUS_COLOR[dominant];
+        const priceLabel = formatPriceLabel(b);   // 보증금/월세 또는 단일 금액 (관리비 제외)
 
         const content = `
       <div onclick="selectBuilding('${b.id}')" style="
@@ -516,9 +561,7 @@ function renderMarkers() {
         margin-bottom:7px;
       ">
         <div style="font-size:10.5px;font-weight:700;color:#111;line-height:1.2;">${b.name}</div>
-        <div style="font-size:9px;color:${color};font-weight:600;margin-top:1px;">
-          공실 ${unitStats.empty} · 임차 ${unitStats.occupied}
-        </div>
+        ${priceLabel ? `<div style="font-size:11px;color:#1a56db;font-weight:800;margin-top:1px;letter-spacing:-0.2px;line-height:1.2;">${priceLabel}</div>` : ''}
         <div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);
           width:0;height:0;border-left:6px solid transparent;
           border-right:6px solid transparent;border-top:6px solid ${color};">
@@ -920,7 +963,7 @@ function agencyCardHTML(p) {
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;">
         <span style="color:#1a56db;display:inline-flex;">${icon(ic, 15)}</span>
         ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g,''))}" style="color:#1a56db;text-decoration:none;font-weight:600;">${escapeHtml(val)}</a>`
-                : `<span>${escapeHtml(val)}</span>`}
+        : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
       <div style="margin-bottom:12px;padding:12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;">
