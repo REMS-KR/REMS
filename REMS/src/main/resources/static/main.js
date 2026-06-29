@@ -213,7 +213,11 @@ async function initMap() {
     naver.maps.Event.addListener(map, 'click', function(e) {
         if (pickerMode) {
             pickerLatlng = e.coord; // 네이버는 e.coord에 좌표가 담깁니다.
+            return;
         }
+        // 시트가 열려 있으면 닫고, 아니면(지도 탭) 상/하단 UI 토글(몰입 모드)
+        if (Sheet.isOpen()) { Sheet.dismiss(); return; }
+        if (activeTab === 'map') toggleImmersive();
     });
 
     await loadData(true);
@@ -327,6 +331,7 @@ function selectBuilding(id) {
 // STATS
 // =====================================================
 function updateStats() {
+    // 상단 통계바는 제거됨 — 해당 요소가 있을 때만 갱신
     let totalEmpty = 0, totalOccupied = 0, totalExpiring = 0;
     state.buildings.forEach(b => {
         const s = getUnitStats(b);
@@ -334,42 +339,144 @@ function updateStats() {
         totalOccupied += s.occupied;
         totalExpiring += s.expiring;
     });
-    document.getElementById('cnt-all').textContent = state.buildings.length;
-    document.getElementById('cnt-empty').textContent = totalEmpty;
-    document.getElementById('cnt-occupied').textContent = totalOccupied;
-    document.getElementById('cnt-expiring').textContent = totalExpiring;
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    set('cnt-all', state.buildings.length);
+    set('cnt-empty', totalEmpty);
+    set('cnt-occupied', totalOccupied);
+    set('cnt-expiring', totalExpiring);
 }
 
 // =====================================================
-// BOTTOM SHEET
+// BOTTOM SHEET — 네이버 지도 스타일(손가락을 따라 부드럽게 + 스냅)
+//  스냅 지점: full(전체) → half(약 2/3 지점에서 걸림) → closed(완전히 내려감)
 // =====================================================
+const Sheet = (function () {
+    const el = document.getElementById('bottom-sheet');
+    const handle = document.getElementById('sheet-handle');
+    const header = document.getElementById('sheet-header');
+
+    let mode = 'building';     // 'building' | 'tab'
+    let current = 'closed';    // 'full' | 'half' | 'closed'
+    let dragging = false;
+    let startY = 0, startPx = 0, lastY = 0, lastT = 0, vel = 0;
+
+    // 시트 높이/화면 높이를 기준으로 각 스냅 지점의 translateY(px)를 계산
+    function metrics() {
+        const A = (el.parentElement && el.parentElement.clientHeight) || window.innerHeight;
+        const H = el.offsetHeight || A * 0.88;
+        return {
+            full: 0,                                         // 맨 위로 올라온 상태
+            half: Math.max(0, Math.round(H - A * 0.40)),     // 화면의 약 60%(=아래 2/3) 지점에서 걸림
+            closed: Math.round(H + 24)                        // 화면 밖으로 완전히 내려감
+        };
+    }
+    function curTranslate() {
+        const m = /translateY\(([-0-9.]+)px\)/.exec(el.style.transform || '');
+        return m ? parseFloat(m[1]) : metrics()[current];
+    }
+    function apply(px, animate) {
+        el.style.transition = animate
+            ? 'transform 0.42s cubic-bezier(0.32,0.72,0,1)'   // 부드러운 감속(네이버 느낌)
+            : 'none';
+        el.style.transform = 'translateY(' + px + 'px)';
+    }
+    function snap(name, animate) {
+        current = name;
+        apply(metrics()[name], animate !== false);
+        el.classList.toggle('sheet-open', name !== 'closed');
+    }
+
+    function open(m, target) {
+        mode = m;
+        el.dataset.mode = m;
+        setImmersive(false);                       // 시트가 열리면 상/하단 UI는 보이게
+        target = target || (m === 'tab' ? 'full' : 'full');
+        if (current === 'closed') {
+            apply(metrics().closed, false);        // 아래에서 시작
+            void el.offsetHeight;                  // reflow → 진입 애니메이션 보장
+            requestAnimationFrame(() => snap(target, true));
+        } else {
+            snap(target, true);
+        }
+    }
+    function dismiss() {
+        const wasMode = mode;
+        if (current === 'closed') { afterClose(wasMode); return; }
+        snap('closed', true);
+        setTimeout(() => afterClose(wasMode), 340);
+    }
+    function afterClose(wasMode) {
+        if ((wasMode || mode) === 'tab' && activeTab !== 'map') markTab('map');
+        currentBuilding = null;
+    }
+    function isOpen() { return current !== 'closed'; }
+
+    // ---------- 드래그(터치/마우스 공용) ----------
+    function down(e) {
+        dragging = true;
+        startY = lastY = (e.touches ? e.touches[0].clientY : e.clientY);
+        lastT = Date.now(); vel = 0;
+        startPx = curTranslate();
+        el.style.transition = 'none';              // 드래그 중엔 손가락을 1:1로 따라오게
+        document.body.style.userSelect = 'none';
+    }
+    function move(e) {
+        if (!dragging) return;
+        const y = (e.touches ? e.touches[0].clientY : e.clientY);
+        const max = metrics().closed;
+        const px = Math.max(0, Math.min(startPx + (y - startY), max));
+        el.style.transform = 'translateY(' + px + 'px)';
+        const now = Date.now(), dt = now - lastT;
+        if (dt > 0) vel = (y - lastY) / dt;        // +면 아래 방향 속도
+        lastY = y; lastT = now;
+        if (e.cancelable) e.preventDefault();
+    }
+    function up() {
+        if (!dragging) return;
+        dragging = false;
+        document.body.style.userSelect = '';
+        const m = metrics();
+        const pos = curTranslate();
+        const TH = 0.55;                            // 플릭 속도 임계값(px/ms)
+        let target;
+        if (vel > TH) {                             // 아래로 빠르게 → 한 단계 내림
+            target = current === 'full' ? 'half' : 'closed';
+        } else if (vel < -TH) {                     // 위로 빠르게 → 한 단계 올림
+            target = current === 'closed' ? 'half' : 'full';
+        } else {                                    // 천천히 놓으면 가장 가까운 지점으로 스냅
+            const cand = (m.half > 4 && m.half < m.closed - 4)
+                ? ['full', 'half', 'closed'] : ['full', 'closed'];
+            target = cand.reduce((a, b) =>
+                Math.abs(m[b] - pos) < Math.abs(m[a] - pos) ? b : a, cand[0]);
+        }
+        if (target === 'closed') dismiss();
+        else snap(target, true);
+    }
+
+    [handle, header].forEach(t => {
+        if (!t) return;
+        t.addEventListener('touchstart', down, { passive: true });
+        t.addEventListener('mousedown', down);
+    });
+    window.addEventListener('touchmove', move, { passive: false });
+    window.addEventListener('mousemove', move);
+    window.addEventListener('touchend', up);
+    window.addEventListener('mouseup', up);
+    window.addEventListener('resize', () => { if (isOpen()) snap(current, false); });
+
+    return { open, dismiss, snap, isOpen };
+})();
+
+// 기존 호출부 호환: ''=닫기, 'full'=탭 시트, 그 외('center'/'half'/'peek')=건물 상세
 function showSheet(state_) {
-    const sheet = document.getElementById('bottom-sheet');
-    sheet.className = 'peek half full center'.includes(state_) ? state_ : '';
-    if (state_) sheet.classList.add(state_);
+    if (!state_) { Sheet.dismiss(); return; }
+    if (state_ === 'full') { Sheet.open('tab', 'full'); return; }
+    Sheet.open('building', 'full');
 }
-
 function closeSheet() {
-    showSheet('');
+    Sheet.dismiss();
     currentBuilding = null;
 }
-
-let sheetStartY = 0;
-let sheetStartClass = '';
-const handle = document.getElementById('sheet-handle');
-handle.addEventListener('touchstart', e => {
-    sheetStartY = e.touches[0].clientY;
-    sheetStartClass = document.getElementById('bottom-sheet').className.split(' ').find(c => ['peek','half','full'].includes(c)) || 'peek';
-}, { passive: true });
-handle.addEventListener('touchend', e => {
-    const endY = e.changedTouches[0].clientY;
-    const delta = sheetStartY - endY;
-    if (delta > 40) {
-        showSheet(sheetStartClass === 'peek' ? 'half' : 'full');
-    } else if (delta < -40) {
-        showSheet(sheetStartClass === 'full' ? 'half' : 'peek');
-    }
-}, { passive: true });
 
 function showBuildingList() {
     document.getElementById('sheet-title').textContent = '내 건물 목록';
@@ -435,7 +542,7 @@ function showBuildingDetail(b) {
       ` : `
       <div style="padding:7px 12px;border-radius:8px;background:#f3f4f6;color:#6b7280;font-size:12.5px;font-weight:600;">🔒 ${b.ownerUid || '다른 사용자'}님의 매물 · 조회 전용</div>
       `}
-      <button onclick="showBuildingList();showSheet('center')" style="padding:7px 14px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:600;color:#6b7280;cursor:pointer;">← 목록</button>
+      <button onclick="switchTab('list')" style="padding:7px 14px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:600;color:#6b7280;cursor:pointer;">← 목록</button>
     </div>
 
     <!-- 주소 + 상세주소 (바로 옆에) -->
@@ -1357,28 +1464,55 @@ async function importNaverJson() {
 // =====================================================
 // UI HELPERS
 // =====================================================
-function switchTab(tab) {
-    if (pickerMode) cancelMapPicker();   // 다른 탭으로 가면 위치 설정 모드 해제
+function markTab(tab) {
     activeTab = tab;
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+}
 
-    const mapWrap = document.getElementById('map-wrap');
-    const filterBar = document.getElementById('filter-bar');
+function switchTab(tab) {
+    if (pickerMode) cancelMapPicker();   // 다른 탭으로 가면 위치 설정 모드 해제
 
     if (tab === 'map') {
-        mapWrap.style.visibility = '';
-        filterBar.style.display = '';
-        showBuildingList();
-        showSheet('');
-    } else {
-        mapWrap.style.visibility = 'hidden';   // 공간은 유지 → 하단 네비가 위로 튀지 않음
-        filterBar.style.display = 'none';
-        showSheet('full');
-        document.getElementById('bottom-sheet').classList.add('tabview');
-        if (tab === 'list') showBuildingList();
-        else if (tab === 'stats') showStatsView();
-        else if (tab === 'settings') showSettingsView();
+        markTab('map');
+        Sheet.dismiss();                 // 지도는 항상 배경 → 시트만 닫음
+        return;
     }
+
+    // 목록/현황/설정 — 지도를 배경에 깔아둔 채 시트(폼)로 띄움 (네이버 지도 스타일)
+    markTab(tab);
+    if (tab === 'list') showBuildingList();
+    else if (tab === 'stats') showStatsView();
+    else if (tab === 'settings') showSettingsView();
+    Sheet.open('tab', 'full');
+}
+
+// ===== 몰입 모드 — 지도 탭에서 지도를 누르면 상/하단 메뉴가 위아래로 사라짐 =====
+function setImmersive(on) {
+    const app = document.getElementById('app');
+    if (app) app.classList.toggle('chrome-hidden', on);
+    if (on) closeFilterPanel();
+}
+function toggleImmersive() {
+    const app = document.getElementById('app');
+    setImmersive(!(app && app.classList.contains('chrome-hidden')));
+}
+
+// ===== 필터 패널 — 상단 필터 버튼에서 쑥 나오고 다시 누르면 쑥 들어감 =====
+function openFilterPanel() {
+    const p = document.getElementById('filter-panel');
+    const b = document.getElementById('filter-btn');
+    if (p) p.classList.add('show');
+    if (b) b.classList.add('active');
+}
+function closeFilterPanel() {
+    const p = document.getElementById('filter-panel');
+    const b = document.getElementById('filter-btn');
+    if (p) p.classList.remove('show');
+    if (b) b.classList.remove('active');
+}
+function toggleFilterPanel() {
+    const p = document.getElementById('filter-panel');
+    (p && p.classList.contains('show')) ? closeFilterPanel() : openFilterPanel();
 }
 
 function showModal() {
@@ -1528,14 +1662,32 @@ document.addEventListener('click', e => {
 // =====================================================
 // FILTER
 // =====================================================
-document.querySelectorAll('.filter-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-        document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        activeFilter = chip.dataset.filter;
-        renderMarkers();
+// =====================================================
+// FILTER — 상단 필터 버튼 + 떠오르는 필터 패널
+// =====================================================
+(function initFilter() {
+    const btn = document.getElementById('filter-btn');
+    const panel = document.getElementById('filter-panel');
+
+    if (btn) btn.addEventListener('click', e => { e.stopPropagation(); toggleFilterPanel(); });
+
+    document.querySelectorAll('#filter-panel .filter-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            document.querySelectorAll('#filter-panel .filter-chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            activeFilter = chip.dataset.filter;
+            renderMarkers();
+        });
     });
-});
+
+    // 패널 바깥을 누르면 닫힘
+    document.addEventListener('click', e => {
+        if (panel && panel.classList.contains('show') &&
+            !panel.contains(e.target) && !(btn && btn.contains(e.target))) {
+            closeFilterPanel();
+        }
+    });
+})();
 
 // =====================================================
 // INIT
