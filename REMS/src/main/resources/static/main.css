@@ -895,3 +895,33 @@ html.mode-web #modal {
     font-size: 11px; font-weight: 600; color: var(--gray-400);
     margin-left: 4px;
 }
+
+/* ===== 휴지통 ===== */
+.trash-note {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: 12.5px; color: #6b7280; line-height: 1.5;
+    background: #f9fafb; border: 1px solid #eef0f3; border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 12px;
+}
+.trash-note b { color: #dc2626; }
+.trash-loading { text-align: center; padding: 24px; color: #9ca3af; font-size: 14px; }
+.trash-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px; border: 1px solid var(--gray-200); border-radius: 12px;
+    margin-bottom: 8px; background: #fff;
+}
+.trash-item-name { font-size: 14.5px; font-weight: 700; color: var(--gray-900);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trash-item-sub { font-size: 12px; color: var(--gray-500); margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trash-item-left { font-size: 11.5px; font-weight: 600; color: #d97706; margin-top: 3px; }
+.trash-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.trash-btn {
+    display: inline-flex; align-items: center; gap: 4px; justify-content: center;
+    font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 8px;
+    cursor: pointer; font-family: var(--font); border: 1px solid transparent; white-space: nowrap;
+}
+.trash-btn.restore { color: var(--blue); background: var(--blue-light); }
+.trash-btn.restore:active { filter: brightness(0.96); }
+.trash-btn.purge { color: var(--red); background: #fff; border-color: var(--red-light); }
+.trash-btn.purge:active { background: var(--red-light); }

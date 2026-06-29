@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDateTime;
 import java.util.*;
 
 @Entity(name = "buildings")
@@ -52,6 +53,10 @@ public class BuildingEntity {
     @OneToMany(mappedBy = "building", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
     private List<UnitEntity> units = new ArrayList<>();
+
+    // 휴지통(소프트 삭제) 시각 — null 이면 정상, 값이 있으면 휴지통 상태.
+    // 이 시점부터 30일이 지나면 스케줄러가 영구 삭제한다.
+    private LocalDateTime deletedAt;
 
     public void addUnit(UnitEntity unit) {
         units.add(unit);

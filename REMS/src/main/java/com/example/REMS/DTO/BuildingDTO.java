@@ -35,6 +35,9 @@ public class BuildingDTO {
     @Builder.Default
     private List<UnitDTO> units = new ArrayList<>();
 
+    // 휴지통 이동 시각(epoch millis). null 이면 정상. 응답 표시용(읽기 전용).
+    private Long deletedAt;
+
     public static BuildingDTO entityToDto(BuildingEntity buildingEntity) {
         List<UnitDTO> unitDTOs = buildingEntity.getUnits().stream()
                 .map(UnitDTO::entityToDto)
@@ -44,6 +47,10 @@ public class BuildingDTO {
         List<String> mediaURLs = (buildingEntity.getMediaURLs() != null)
                 ? new ArrayList<>(buildingEntity.getMediaURLs())
                 : new ArrayList<>();
+
+        Long deletedAtMillis = (buildingEntity.getDeletedAt() != null)
+                ? buildingEntity.getDeletedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                : null;
 
         return new BuildingDTO(
                 buildingEntity.getId(),
@@ -59,7 +66,8 @@ public class BuildingDTO {
                 buildingEntity.getMemo(),
                 ownerUid,
                 mediaURLs,
-                unitDTOs);
+                unitDTOs,
+                deletedAtMillis);
     }
 
     public BuildingEntity dtoToEntity(UserEntity owner) {

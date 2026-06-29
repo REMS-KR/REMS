@@ -18,7 +18,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.springframework.scheduling.annotation.Scheduled;
+
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -30,6 +33,7 @@ public class BuildingService {
 
     private static final Logger logger = LoggerFactory.getLogger(BuildingService.class);
     private static final int MAX_IMAGES = 10;   // 건물당 첨부 가능한 최대 이미지 수
+    private static final int TRASH_RETENTION_DAYS = 30;  // 휴지통 보관 기간(일). 경과 시 자동 영구 삭제
     private final BuildingRepository buildingRepository;
     private final UserRepository userRepository;
 
@@ -140,7 +144,7 @@ public class BuildingService {
     @Transactional(readOnly = true)
     public List<BuildingDTO> getAllBuildings(String uid, UserDetails userDetails) {
         checkAuth(uid, userDetails);
-        List<BuildingDTO> buildings = buildingRepository.findAll().stream()
+        List<BuildingDTO> buildings = buildingRepository.findByDeletedAtIsNull().stream()
                 .map(BuildingDTO::entityToDto)
                 .collect(Collectors.toList());
         logger.info("전체 건물 {}개 조회 완료! 요청자: {}", buildings.size(), uid);
@@ -167,7 +171,7 @@ public class BuildingService {
     @Transactional(readOnly = true)
     public List<BuildingDTO> findByType(String uid, String type, UserDetails userDetails) {
         checkAuth(uid, userDetails);
-        return buildingRepository.findByType(type).stream()
+        return buildingRepository.findByTypeAndDeletedAtIsNull(type).stream()
                 .map(BuildingDTO::entityToDto)
                 .collect(Collectors.toList());
     }
@@ -217,16 +221,66 @@ public class BuildingService {
         return BuildingDTO.entityToDto(buildingEntity);
     }
 
-    // 건물 삭제 — 작성자 본인만 (cascade로 호실까지 삭제)
+    // 건물 삭제 — 작성자 본인만. 즉시 지우지 않고 "휴지통으로 이동"(소프트 삭제: deletedAt 기록)
     @Transactional
     public BuildingDTO deleteBuilding(String uid, Long id, UserDetails userDetails) {
         checkAuth(uid, userDetails);
         BuildingEntity buildingEntity = buildingRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("건물을 찾을 수 없습니다"));
         checkOwner(buildingEntity, uid);
+        buildingEntity.setDeletedAt(LocalDateTime.now());   // 휴지통으로 이동
+        buildingRepository.save(buildingEntity);
+        logger.info("{}번 건물 휴지통 이동! 작성자: {}", id, uid);
+        return BuildingDTO.entityToDto(buildingEntity);
+    }
+
+    // 휴지통 목록 — 작성자 본인의, 삭제됐고 아직 30일 안 지난 건물만
+    @Transactional(readOnly = true)
+    public List<BuildingDTO> getTrash(String uid, UserDetails userDetails) {
+        checkAuth(uid, userDetails);
+        LocalDateTime threshold = LocalDateTime.now().minusDays(TRASH_RETENTION_DAYS);
+        return buildingRepository.findByOwner_UidAndDeletedAtIsNotNullOrderByDeletedAtDesc(uid).stream()
+                .filter(b -> b.getDeletedAt() != null && b.getDeletedAt().isAfter(threshold))
+                .map(BuildingDTO::entityToDto)
+                .collect(Collectors.toList());
+    }
+
+    // 휴지통에서 복원 — 작성자 본인만 (deletedAt 해제)
+    @Transactional
+    public BuildingDTO restoreBuilding(String uid, Long id, UserDetails userDetails) {
+        checkAuth(uid, userDetails);
+        BuildingEntity buildingEntity = buildingRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("건물을 찾을 수 없습니다"));
+        checkOwner(buildingEntity, uid);
+        buildingEntity.setDeletedAt(null);
+        buildingRepository.save(buildingEntity);
+        logger.info("{}번 건물 복원! 작성자: {}", id, uid);
+        return BuildingDTO.entityToDto(buildingEntity);
+    }
+
+    // 휴지통에서 완전(영구) 삭제 — 작성자 본인만 (cascade로 호실까지 삭제)
+    @Transactional
+    public BuildingDTO permanentlyDelete(String uid, Long id, UserDetails userDetails) {
+        checkAuth(uid, userDetails);
+        BuildingEntity buildingEntity = buildingRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("건물을 찾을 수 없습니다"));
+        checkOwner(buildingEntity, uid);
         BuildingDTO deleted = BuildingDTO.entityToDto(buildingEntity);
         buildingRepository.delete(buildingEntity);
-        logger.info("{}번 건물 삭제 완료! 작성자: {}", id, uid);
+        logger.info("{}번 건물 영구 삭제! 작성자: {}", id, uid);
         return deleted;
+    }
+
+    // 매일 새벽 3시: 휴지통에서 30일 지난 건물 자동 영구 삭제
+    // (활성화하려면 @EnableScheduling 필요 — SchedulingConfig.java 참고)
+    @Scheduled(cron = "0 0 3 * * *")
+    @Transactional
+    public void purgeExpiredTrash() {
+        LocalDateTime threshold = LocalDateTime.now().minusDays(TRASH_RETENTION_DAYS);
+        List<BuildingEntity> expired = buildingRepository.findByDeletedAtBefore(threshold);
+        if (!expired.isEmpty()) {
+            buildingRepository.deleteAll(expired);
+            logger.info("휴지통 자동 정리: {}개 건물 영구 삭제 (삭제 후 {}일 경과)", expired.size(), TRASH_RETENTION_DAYS);
+        }
     }
 }

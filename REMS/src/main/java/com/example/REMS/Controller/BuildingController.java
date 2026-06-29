@@ -91,4 +91,30 @@ public class BuildingController {
                                                       @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntity.ok(buildingService.deleteBuilding(uid, id, userDetails));
     }
+
+    // 휴지통 목록 조회 (작성자 본인)
+    @Operation(summary = "휴지통 목록 조회")
+    @GetMapping("/trash/{uid}")
+    public ResponseEntity<List<BuildingDTO>> getTrash(@PathVariable("uid") String uid,
+                                                      @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(buildingService.getTrash(uid, userDetails));
+    }
+
+    // 휴지통에서 복원 (deletedAt 해제)
+    @Operation(summary = "휴지통 복원")
+    @PutMapping("/restore/{uid}/{id}")
+    public ResponseEntity<BuildingDTO> restoreBuilding(@PathVariable("uid") String uid,
+                                                       @PathVariable("id") Long id,
+                                                       @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(buildingService.restoreBuilding(uid, id, userDetails));
+    }
+
+    // 휴지통에서 완전(영구) 삭제 — 호실까지 cascade 삭제
+    @Operation(summary = "휴지통 영구 삭제")
+    @DeleteMapping("/trash/{uid}/{id}")
+    public ResponseEntity<BuildingDTO> permanentlyDelete(@PathVariable("uid") String uid,
+                                                         @PathVariable("id") Long id,
+                                                         @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(buildingService.permanentlyDelete(uid, id, userDetails));
+    }
 }

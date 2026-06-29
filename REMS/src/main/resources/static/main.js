@@ -148,6 +148,13 @@ const Api = {
     },
     deleteBuilding: (id) =>
         fetch(`${API_BASE_URL}/building/delete/${getUid()}/${id}`, { method: 'DELETE', headers: authHeaders() }).then(handleResponse),
+    // 휴지통 (소프트 삭제 / 복원 / 영구삭제)
+    getTrash: () =>
+        fetch(`${API_BASE_URL}/building/trash/${getUid()}`, { headers: authHeaders() }).then(handleResponse),
+    restoreBuilding: (id) =>
+        fetch(`${API_BASE_URL}/building/restore/${getUid()}/${id}`, { method: 'PUT', headers: authHeaders() }).then(handleResponse),
+    permanentlyDeleteBuilding: (id) =>
+        fetch(`${API_BASE_URL}/building/trash/${getUid()}/${id}`, { method: 'DELETE', headers: authHeaders() }).then(handleResponse),
     searchBuildings: (keyword) =>
         fetch(`${API_BASE_URL}/building/search/${getUid()}?keyword=${encodeURIComponent(keyword)}`, { headers: authHeaders() }).then(handleResponse),
 
@@ -202,6 +209,9 @@ function escapeHtml(s) {
 // [B] edit by smsong - 라인 스타일 SVG 아이콘 (하단 네비와 동일한 stroke 라인 톤)
 // 기본 이모지(✏️🔒📷✕✓👤 등) 대신 사용. currentColor 상속 → 텍스트 색을 그대로 따름.
 const ICON_PATHS = {
+    trash:   '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+    info:    '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+    restore: '<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>',
     edit:    '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/>',
     lock:    '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
     camera:  '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="3.5"/>',
@@ -409,7 +419,7 @@ async function initMap() {
     // 현재 위치 추적 시작(파란 점). iOS가 아니면 나침반도 바로 연결
     startGeolocationTracking();
     if (!(typeof DeviceOrientationEvent !== 'undefined' &&
-        typeof DeviceOrientationEvent.requestPermission === 'function')) {
+          typeof DeviceOrientationEvent.requestPermission === 'function')) {
         ensureOrientationPermission();
     }
 
@@ -435,13 +445,13 @@ function gotoMyLocation() {
 function centerOnCurrentLocationOnce() {
     if (!navigator.geolocation || !map) return;
     navigator.geolocation.getCurrentPosition(pos => {
-            if (_suppressAutoCenter) return;     // 그 사이 사용자가 지도를 조작했으면 중단
-            const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
-            updateGeoMarker(latlng, pos.coords.heading);
-            map.setCenter(latlng);
-            map.setZoom(16);
-        }, () => { /* 거부/실패 → 기본 서울 중심 유지 */ },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+        if (_suppressAutoCenter) return;     // 그 사이 사용자가 지도를 조작했으면 중단
+        const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+        updateGeoMarker(latlng, pos.coords.heading);
+        map.setCenter(latlng);
+        map.setZoom(16);
+    }, () => { /* 거부/실패 → 기본 서울 중심 유지 */ },
+       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
 }
 
 // =====================================================
@@ -962,7 +972,6 @@ async function hydrateOwnerCard(b) {
         <div class="owner-card-label">매물 등록자</div>
         <div class="owner-card-name">${escapeHtml(name)}${mine ? '<span class="owner-you">나</span>' : ''}</div>
       </div>
-      ${p && p.provider ? providerBadge(p.provider) : ''}
     `;
     // [B] edit by smsong - 공인중개사사무소 정보 카드 렌더
     const agencyEl = document.getElementById('agencycard-' + b.id);
@@ -979,7 +988,7 @@ function agencyCardHTML(p) {
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;">
         <span style="color:#1a56db;display:inline-flex;">${icon(ic, 15)}</span>
         ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g,''))}" style="color:#1a56db;text-decoration:none;font-weight:600;">${escapeHtml(val)}</a>`
-        : `<span>${escapeHtml(val)}</span>`}
+                : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
       <div style="margin-bottom:12px;padding:12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;text-align:left;">
@@ -1298,7 +1307,7 @@ async function saveBuilding(id, lat, lng) {
 async function deleteBuilding(id) {
     const b = state.buildings.find(b => b.id === id);
     if (b && !isMine(b)) { showToast('본인이 등록한 매물만 삭제할 수 있습니다'); return; }
-    if (!confirm('건물과 모든 호실 정보가 삭제됩니다. 계속하시겠습니까?')) return;
+    if (!confirm('이 매물을 휴지통으로 이동할까요?\n휴지통에서 30일이 지나면 자동으로 영구 삭제됩니다.')) return;
     try {
         await Api.deleteBuilding(id);
         await loadData();
@@ -1308,7 +1317,7 @@ async function deleteBuilding(id) {
         showBuildingList();
         showSheet('center');
         currentBuilding = null;
-        showToast('건물이 삭제되었습니다');
+        showToast('휴지통으로 이동되었습니다');
     } catch (e) {
         showToast('삭제 실패: ' + e.message);
     }
@@ -1653,6 +1662,7 @@ function showSettingsView() {
       <div class="profile-actions">
         <button class="btn-secondary" onclick="document.getElementById('profile-file').click()" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;">${icon('camera',16)} 프로필 사진 변경</button>
         <button class="btn-secondary" onclick="openProfileEdit()" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;">${icon('edit',16)} 내 정보 수정</button>
+        <button class="btn-secondary" onclick="openTrash()" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;">${icon('trash',16)} 휴지통</button>
         <button class="profile-logout" onclick="confirmLogout()">로그아웃</button>
       </div>
     </div>
@@ -2375,3 +2385,90 @@ window.addEventListener('offline', () => showToast('오프라인 모드 — 데�
     });
     mo.observe(sb, { childList: true });   // subtree:false → 하위 카드 hydrate 에는 미반응
 })();
+
+// =====================================================
+// 휴지통 (소프트 삭제된 매물) — 설정 메뉴에서 진입
+//  · 삭제 시 휴지통으로 이동 → 30일 후 자동 영구 삭제
+//  · 여기서 복원 또는 즉시 완전 삭제 가능
+// =====================================================
+const TRASH_RETENTION_DAYS = 30;
+
+function trashDaysLeft(deletedAtMillis) {
+    if (!deletedAtMillis) return TRASH_RETENTION_DAYS;
+    const purgeAt = deletedAtMillis + TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    return Math.max(0, Math.ceil((purgeAt - Date.now()) / (24 * 60 * 60 * 1000)));
+}
+
+async function openTrash() {
+    document.getElementById('modal-title').textContent = '휴지통';
+    document.getElementById('modal-body').innerHTML = `
+      <div class="trash-note">${icon('info', 15)}<span>휴지통의 매물은 삭제 후 <b>${TRASH_RETENTION_DAYS}일</b>이 지나면 자동으로 영구 삭제됩니다.</span></div>
+      <div id="trash-list"><div class="trash-loading">불러오는 중…</div></div>`;
+    document.getElementById('modal-footer').innerHTML = `<button class="btn-secondary" onclick="closeModal()">닫기</button>`;
+    showModal();
+    try {
+        const items = await Api.getTrash();
+        renderTrashList(items || []);
+    } catch (e) {
+        const el = document.getElementById('trash-list');
+        if (el) el.innerHTML = `<div class="trash-loading" style="color:#dc2626;">불러오기 실패: ${escapeHtml(e.message)}</div>`;
+    }
+}
+
+function renderTrashList(items) {
+    const el = document.getElementById('trash-list');
+    if (!el) return;
+    if (!items.length) {
+        el.innerHTML = `<div class="empty-state" style="padding:28px 0;">
+            <div class="empty-state-icon">${icon('trash', 48, 'color:#9ca3af;')}</div>
+            <div class="empty-state-title">휴지통이 비어 있습니다</div></div>`;
+        return;
+    }
+    el.innerHTML = items.map(b => {
+        const left = trashDaysLeft(b.deletedAt);
+        const emoji = TYPE_EMOJI[b.type] || '🏢';
+        const firstImg = (b.mediaURLs && b.mediaURLs.length) ? b.mediaURLs[0] : '';
+        const thumb = firstImg
+            ? `<div class="building-thumb has-img"><img src="${escapeHtml(firstImg)}" alt="" onerror="this.remove();this.parentElement.classList.remove('has-img')"><span class="building-thumb-emoji">${emoji}</span></div>`
+            : `<div class="building-thumb"><span class="building-thumb-emoji">${emoji}</span></div>`;
+        return `<div class="trash-item">
+            ${thumb}
+            <div style="flex:1;min-width:0;">
+              <div class="trash-item-name">${escapeHtml(b.name || '(이름 없음)')}</div>
+              <div class="trash-item-sub">${escapeHtml(b.address || '')}</div>
+              <div class="trash-item-left">${left > 0 ? `${left}일 후 영구 삭제` : '곧 영구 삭제됩니다'}</div>
+            </div>
+            <div class="trash-actions">
+              <button class="trash-btn restore" onclick="restoreFromTrash('${b.id}')">${icon('restore', 14)} 복원</button>
+              <button class="trash-btn purge" onclick="purgeFromTrash('${b.id}')">${icon('trash', 14)} 완전삭제</button>
+            </div>
+          </div>`;
+    }).join('');
+}
+
+async function restoreFromTrash(id) {
+    try {
+        await Api.restoreBuilding(id);
+        await loadData();
+        renderMarkers();
+        updateStats();
+        if (typeof showBuildingList === 'function') showBuildingList();
+        const items = await Api.getTrash();
+        renderTrashList(items || []);
+        showToast('매물을 복원했습니다');
+    } catch (e) {
+        showToast('복원 실패: ' + e.message);
+    }
+}
+
+async function purgeFromTrash(id) {
+    if (!confirm('이 매물을 완전히 삭제할까요?\n영구 삭제되며 복구할 수 없습니다.')) return;
+    try {
+        await Api.permanentlyDeleteBuilding(id);
+        const items = await Api.getTrash();
+        renderTrashList(items || []);
+        showToast('영구 삭제되었습니다');
+    } catch (e) {
+        showToast('삭제 실패: ' + e.message);
+    }
+}
