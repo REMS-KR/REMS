@@ -1054,3 +1054,34 @@ html.mode-web #modal {
     display: flex; flex-direction: column; align-items: center; gap: 8px;
     padding: 26px 0; color: var(--gray-400); font-size: 13px; font-weight: 500;
 }
+
+/* ===================================================== */
+/* 로딩 오버레이 — 저장(API) 진행 중 전체 차단 + 스피너          */
+/* ===================================================== */
+#loading-overlay {
+    position: fixed; inset: 0; z-index: 99999;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(17, 24, 39, 0.28);
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+    /* 표시 중에는 이 레이어가 모든 포인터 이벤트를 흡수 → 아래 버튼 클릭 차단 */
+    opacity: 0; transition: opacity 0.15s ease;
+}
+#loading-overlay.show { display: flex; opacity: 1; }
+
+.loading-box {
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    padding: 24px 30px; border-radius: var(--radius-lg);
+    background: var(--white); box-shadow: var(--shadow-lg);
+    min-width: 160px;
+}
+.loading-spinner {
+    width: 38px; height: 38px; border-radius: 50%;
+    border: 3.5px solid var(--blue-light);
+    border-top-color: var(--blue);
+    animation: loading-spin 0.7s linear infinite;
+}
+@keyframes loading-spin { to { transform: rotate(360deg); } }
+.loading-text {
+    font-size: 13.5px; font-weight: 700; color: var(--gray-700);
+    letter-spacing: -0.2px; font-family: var(--font);
+}

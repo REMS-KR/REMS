@@ -1438,6 +1438,7 @@ function openEditBuilding(id) {
 }
 
 async function saveBuilding(id, lat, lng) {
+    if (_isSubmitting) return;                 // 진행 중이면 중복 호출 차단
     const name = document.getElementById('f-name').value.trim();
     if (!name) { showToast('건물명을 입력하세요'); return; }
 
@@ -1459,6 +1460,7 @@ async function saveBuilding(id, lat, lng) {
         return;
     }
 
+    showLoading(id ? '건물 정보를 저장하는 중…' : '건물을 추가하는 중…');
     try {
         if (id) {
             dto.id = id;
@@ -1475,6 +1477,8 @@ async function saveBuilding(id, lat, lng) {
         showToast(id ? '건물 정보가 수정되었습니다' : '건물이 추가되었습니다');
     } catch (e) {
         showToast('저장 실패: ' + e.message);
+    } finally {
+        hideLoading();
     }
 }
 
@@ -1683,6 +1687,7 @@ function selectStatus(status) {
 }
 
 async function saveUnit(buildingId, unitId) {
+    if (_isSubmitting) return;                 // 진행 중이면 중복 호출 차단
     const name = document.getElementById('uf-name').value.trim();
     if (!name) { showToast('호실명을 입력하세요'); return; }
 
@@ -1701,6 +1706,7 @@ async function saveUnit(buildingId, unitId) {
         memo: document.getElementById('uf-memo').value.trim()
     };
 
+    showLoading(unitId ? '호실 정보를 저장하는 중…' : '호실을 추가하는 중…');
     try {
         if (unitId) {
             await Api.updateUnit(unitId, dto);
@@ -1716,6 +1722,8 @@ async function saveUnit(buildingId, unitId) {
         showToast(unitId ? '호실 정보가 수정되었습니다' : '호실이 추가되었습니다');
     } catch (e) {
         showToast('저장 실패: ' + e.message);
+    } finally {
+        hideLoading();
     }
 }
 
@@ -2214,6 +2222,38 @@ function showToast(msg) {
     t.textContent = msg;
     t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// =====================================================
+// 로딩 오버레이 — 매물/호실 저장 등 API 진행 중 전체 화면을 덮어
+//  · 모든 클릭을 가로채 다른 버튼을 못 누르게 막고(중복 호출 방지)
+//  · _isSubmitting 가드로 함수 진입 자체도 차단(이중 안전장치)
+//  · HTML 수정 없이 첫 호출 때 오버레이 DOM을 동적으로 만든다.
+// =====================================================
+let _isSubmitting = false;
+
+function showLoading(text) {
+    _isSubmitting = true;
+    let el = document.getElementById('loading-overlay');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'loading-overlay';
+        el.innerHTML =
+            '<div class="loading-box">' +
+            '  <div class="loading-spinner"></div>' +
+            '  <div class="loading-text"></div>' +
+            '</div>';
+        document.body.appendChild(el);
+    }
+    el.querySelector('.loading-text').textContent = text || '처리 중…';
+    // 진행 중 클릭을 흡수 (캡처 단계에서 막아 버튼 onclick 도달 차단)
+    requestAnimationFrame(() => el.classList.add('show'));
+}
+
+function hideLoading() {
+    _isSubmitting = false;
+    const el = document.getElementById('loading-overlay');
+    if (el) el.classList.remove('show');
 }
 
 // =====================================================
