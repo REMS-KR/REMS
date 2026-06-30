@@ -472,7 +472,7 @@ async function initMap() {
     // 현재 위치 추적 시작(파란 점). iOS가 아니면 나침반도 바로 연결
     startGeolocationTracking();
     if (!(typeof DeviceOrientationEvent !== 'undefined' &&
-          typeof DeviceOrientationEvent.requestPermission === 'function')) {
+        typeof DeviceOrientationEvent.requestPermission === 'function')) {
         ensureOrientationPermission();
     }
 
@@ -498,13 +498,13 @@ function gotoMyLocation() {
 function centerOnCurrentLocationOnce() {
     if (!navigator.geolocation || !map) return;
     navigator.geolocation.getCurrentPosition(pos => {
-        if (_suppressAutoCenter) return;     // 그 사이 사용자가 지도를 조작했으면 중단
-        const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
-        updateGeoMarker(latlng, pos.coords.heading);
-        map.setCenter(latlng);
-        map.setZoom(16);
-    }, () => { /* 거부/실패 → 기본 서울 중심 유지 */ },
-       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+            if (_suppressAutoCenter) return;     // 그 사이 사용자가 지도를 조작했으면 중단
+            const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+            updateGeoMarker(latlng, pos.coords.heading);
+            map.setCenter(latlng);
+            map.setZoom(16);
+        }, () => { /* 거부/실패 → 기본 서울 중심 유지 */ },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
 }
 
 // =====================================================
@@ -625,6 +625,18 @@ function buildingMarkerSub(b) {
     return s.empty > 0 ? `호실 ${s.total} · 공실 ${s.empty}` : `호실 ${s.total}`;
 }
 
+// 마커용 약식 가격 — 매매:"매 12.4억" / 월세:"월 30/78" / 전세:"전 2.4억"
+function formatMarkerPrice(b) {
+    const deal = inferDeal(b);
+    const dep = b.deposit || 0, rent = b.rent || 0;
+    const depStr = formatEok(dep);
+    if (deal === 'sale')   return depStr ? `매 ${depStr}` : '매';
+    if (deal === 'jeonse') return depStr ? `전 ${depStr}` : '전';
+    // monthly
+    if (rent > 0) return depStr ? `월 ${depStr}/${rent}` : `월 ${rent}`;
+    return depStr ? `전 ${depStr}` : '';   // 월세인데 월세액이 0이면 사실상 전세
+}
+
 // =====================================================
 // MARKER + CLUSTERING
 //  · 화면 픽셀 거리(CLUSTER_PX) 기준으로 가까운 매물을 한 개의 동그라미(숫자) 마커로 묶는다.
@@ -640,7 +652,8 @@ function addBuildingMarker(b) {
     const unitStats = getUnitStats(b);
     const dominant = unitStats.empty > 0 ? 'empty' : (unitStats.expiring > 0 ? 'expiring' : 'occupied');
     const color = STATUS_COLOR[dominant];
-    const subLabel = buildingMarkerSub(b);   // 호실 N · 공실 M (매물엔 가격 없음)
+    const priceLabel = formatMarkerPrice(b);          // 매 12.4억 / 월 30/78 / 전 2.4억
+    const priceColor = DEAL_COLOR[inferDeal(b)] || '#1a56db';
 
     const content = `
       <div onclick="selectBuilding('${b.id}')" style="
@@ -649,13 +662,13 @@ function addBuildingMarker(b) {
         border-radius:9px; padding:3px 8px;
         box-shadow:0 2px 7px rgba(0,0,0,0.16);
         font-family:-apple-system,sans-serif;
-        width:max-content; max-width:180px; text-align:center;
+        width:max-content; max-width:200px; text-align:center;
         transform:translateX(-50%) translateY(-100%);
         margin-bottom:7px;
       ">
         <div style="font-size:10.5px;font-weight:700;color:#111;line-height:1.25;
           white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(b.name)}</div>
-        ${subLabel ? `<div style="font-size:10.5px;color:${color};font-weight:700;margin-top:1px;letter-spacing:-0.2px;line-height:1.25;white-space:nowrap;">${escapeHtml(subLabel)}</div>` : ''}
+        ${priceLabel ? `<div style="font-size:11px;color:${priceColor};font-weight:800;margin-top:1px;letter-spacing:-0.2px;line-height:1.25;white-space:nowrap;">${escapeHtml(priceLabel)}</div>` : ''}
         <div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);
           width:0;height:0;border-left:6px solid transparent;
           border-right:6px solid transparent;border-top:6px solid ${color};">
@@ -799,9 +812,9 @@ function showClusterList(items) {
 
 function matchesFilter(b) {
     if (activeFilter === 'all') return true;
-    // 거래유형 필터: 해당 거래유형의 호실을 1개 이상 가진 매물
+    // 거래유형 필터: 매물의 대표 거래유형 기준
     if (DEAL_CODES.includes(activeFilter)) {
-        return (b.units || []).some(u => inferDeal(u) === activeFilter);
+        return inferDeal(b) === activeFilter;
     }
     if (['house', 'multiplex', 'officetel', 'apartment', 'neighborhood', 'commercial'].includes(activeFilter)) {
         return b.type === activeFilter;
@@ -1038,9 +1051,10 @@ function buildingListItemHTML(b) {
     return `<div class="building-list-item" onclick="selectBuilding('${b.id}')">
       ${thumb}
       <div style="flex:1;min-width:0;">
-        <div class="building-list-name" style="display:flex;align-items:center;gap:6px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${b.name}</span></div>
+        <div class="building-list-name" style="display:flex;align-items:center;gap:6px;">${dealBadge(b)}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${b.name}</span></div>
         <div class="building-list-addr">${b.address}</div>
         <div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          ${formatPriceLabel(b) ? `<span style="font-size:11.5px;color:#1a56db;font-weight:800;letter-spacing:-0.2px;">${formatPriceLabel(b)}</span>` : ''}
           <span style="font-size:11px;color:#6b7280;font-weight:700;">${TYPE_LABEL[b.type] || ''}</span>
           ${isMine(b)
         ? '<span style="font-size:10.5px;color:#1a56db;background:#e8f0fe;font-weight:700;padding:1px 7px;border-radius:10px;">내 매물</span>'
@@ -1116,6 +1130,27 @@ function showBuildingDetail(b) {
       <span style="font-size:12px;font-weight:700;color:#6b7280;flex-shrink:0;">주소</span>
       <span style="font-size:14px;font-weight:600;color:#111827;">${b.address || '-'}</span>
       <span style="margin-left:auto;font-size:11px;font-weight:700;color:#1a56db;background:#e8f0fe;padding:2px 8px;border-radius:10px;flex-shrink:0;">${TYPE_LABEL[b.type] || ''}</span>
+    </div>
+
+    <!-- 대표 거래유형 + 금액 -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      ${dealBadge(b, 12)}
+      <span style="font-size:15px;font-weight:800;color:#1a56db;letter-spacing:-0.3px;">${formatPriceLabel(b) || '가격 미입력'}</span>
+    </div>
+    <div class="building-info-grid" style="grid-template-columns:repeat(${inferDeal(b) === 'monthly' ? 3 : 2},1fr);">
+      <div class="info-card">
+        <div class="info-card-label">${inferDeal(b) === 'sale' ? '매매가' : inferDeal(b) === 'jeonse' ? '전세금' : '보증금'}</div>
+        <div class="info-card-value">${(b.deposit || 0).toLocaleString()}만원</div>
+      </div>
+      ${inferDeal(b) === 'monthly' ? `
+      <div class="info-card">
+        <div class="info-card-label">월세</div>
+        <div class="info-card-value">${(b.rent || 0).toLocaleString()}만원</div>
+      </div>` : ''}
+      <div class="info-card">
+        <div class="info-card-label">관리비</div>
+        <div class="info-card-value">${(b.manage || 0).toLocaleString()}만원</div>
+      </div>
     </div>
 
     ${(b.parkingAvailable || b.petAllowed || b.jeonseLoanAvailable) ? `
@@ -1236,7 +1271,7 @@ function agencyCardHTML(p) {
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;">
         <span style="color:#1a56db;display:inline-flex;">${icon(ic, 15)}</span>
         ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g,''))}" style="color:#1a56db;text-decoration:none;font-weight:600;">${escapeHtml(val)}</a>`
-                : `<span>${escapeHtml(val)}</span>`}
+        : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
       <div style="margin-bottom:12px;padding:12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;text-align:left;">
@@ -1468,6 +1503,28 @@ function openBuildingForm(building, lat, lng, addr) {
         <option value="commercial" ${building && building.type==='commercial'?'selected':''}>상가</option>
       </select>
     </div>
+    <div class="form-group">
+      <label class="form-label">대표 거래유형 *</label>
+      <div class="deal-selector" id="f-deal-selector">
+        <div class="deal-option" data-deal="sale" onclick="selectDeal('f','sale')">매매</div>
+        <div class="deal-option" data-deal="jeonse" onclick="selectDeal('f','jeonse')">전세</div>
+        <div class="deal-option" data-deal="monthly" onclick="selectDeal('f','monthly')">월세</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" id="f-deposit-label">보증금 (만원)</label>
+      <input id="f-deposit" class="form-input" type="number" min="0" placeholder="예: 1000" value="${building ? (building.deposit || '') : ''}">
+    </div>
+    <div class="form-row">
+      <div class="form-group" id="f-rent-group">
+        <label class="form-label">월세 (만원)</label>
+        <input id="f-rent" class="form-input" type="number" min="0" placeholder="예: 50" value="${building ? (building.rent || '') : ''}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">관리비 (만원)</label>
+        <input id="f-manage" class="form-input" type="number" min="0" placeholder="예: 5" value="${building ? (building.manage || '') : ''}">
+      </div>
+    </div>
     ${isEdit ? `
     <div class="form-group">
       <label class="form-label">현재 사진 <span style="font-weight:400;color:#9ca3af;">(${icon('close',11)} 눌러 제거)</span></label>
@@ -1492,7 +1549,6 @@ function openBuildingForm(building, lat, lng, addr) {
       <input id="f-media" class="form-input" type="file" accept="image/*,video/*" multiple onchange="addBfFiles(event)">
       <div id="bf-new-preview" class="bf-thumb-wrap"></div>
     </div>
-    <div style="font-size:12px;color:#9ca3af;margin-top:6px;">거래유형·보증금·월세 등 금액 정보는 <b>호실(호실 추가)</b>에서 입력합니다.</div>
   `;
 
     document.getElementById('modal-footer').innerHTML = `
@@ -1503,6 +1559,7 @@ function openBuildingForm(building, lat, lng, addr) {
 
     renderBfExisting();   // 수정 시 기존 이미지 썸네일 표시
     updateBfCount();
+    selectDeal('f', isEdit ? inferDeal(building) : 'monthly');   // 대표 거래유형 초기 상태(라벨/월세칸)
     showModal();
 }
 
@@ -1518,10 +1575,15 @@ async function saveBuilding(id, lat, lng) {
     if (!name) { showToast('건물명을 입력하세요'); return; }
 
     const jeonseLoanAvailable = document.getElementById('f-jeonse-loan').classList.contains('on');
+    const dealType = selectedDeal('f');
     const dto = {
         name,
         address: document.getElementById('f-addr').value.trim(),
         type: document.getElementById('f-type').value,
+        dealType,
+        deposit: parseInt(document.getElementById('f-deposit').value) || 0,
+        rent: dealType === 'monthly' ? (parseInt(document.getElementById('f-rent').value) || 0) : 0,
+        manage: parseInt(document.getElementById('f-manage').value) || 0,
         jeonseLoanAvailable,
         jeonseLoanType: jeonseLoanAvailable ? document.getElementById('f-jeonse-loan-type').value : null,
         parkingAvailable: document.getElementById('f-parking').classList.contains('on'),
