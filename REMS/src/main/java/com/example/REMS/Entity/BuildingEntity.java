@@ -36,6 +36,14 @@ public class BuildingEntity {
     //  - monthly: deposit = 보증금, rent = 월세
     private String dealType;
 
+    // 전세 대출 가능 여부 + 종류 (HUG/HF/SGI/버팀목/LH)
+    private Boolean jeonseLoanAvailable;
+    private String jeonseLoanType;
+
+    // 옵션 — 주차 / 애완
+    private Boolean parkingAvailable;
+    private Boolean petAllowed;
+
     @Column(length = 1000)
     private String memo;            // 메모 (UI에서는 숨김, 데이터는 보존)
 

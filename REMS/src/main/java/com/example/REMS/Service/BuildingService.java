@@ -206,6 +206,10 @@ public class BuildingService {
         buildingEntity.setRent(buildingDTO.getRent());
         buildingEntity.setManage(buildingDTO.getManage());
         buildingEntity.setDealType(buildingDTO.getDealType());
+        buildingEntity.setJeonseLoanAvailable(buildingDTO.getJeonseLoanAvailable());
+        buildingEntity.setJeonseLoanType(buildingDTO.getJeonseLoanType());
+        buildingEntity.setParkingAvailable(buildingDTO.getParkingAvailable());
+        buildingEntity.setPetAllowed(buildingDTO.getPetAllowed());
         buildingEntity.setMemo(buildingDTO.getMemo());
 
         // 유지할 기존 이미지 + 새로 업로드한 이미지 병합

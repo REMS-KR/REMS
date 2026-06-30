@@ -1118,6 +1118,13 @@ function showBuildingDetail(b) {
       <span style="margin-left:auto;font-size:11px;font-weight:700;color:#1a56db;background:#e8f0fe;padding:2px 8px;border-radius:10px;flex-shrink:0;">${TYPE_LABEL[b.type] || ''}</span>
     </div>
 
+    ${(b.parkingAvailable || b.petAllowed || b.jeonseLoanAvailable) ? `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+      ${b.parkingAvailable ? '<span class="opt-chip">주차</span>' : ''}
+      ${b.petAllowed ? '<span class="opt-chip">애완</span>' : ''}
+      ${b.jeonseLoanAvailable ? `<span class="opt-chip on">전세대출${b.jeonseLoanType ? ' · ' + b.jeonseLoanType : ''}</span>` : ''}
+    </div>` : ''}
+
     ${renderUnitStatus(b)}
   `;
     hydrateOwnerCard(b);
@@ -1467,6 +1474,20 @@ function openBuildingForm(building, lat, lng, addr) {
       <div id="bf-existing" class="bf-thumb-wrap"></div>
     </div>` : ''}
     <div class="form-group">
+      <label class="form-label">옵션</label>
+      <div class="toggle-row">
+        <button type="button" id="f-parking" class="toggle-btn ${building && building.parkingAvailable ? 'on' : ''}" onclick="this.classList.toggle('on')"><span class="tg-dot"></span>주차</button>
+        <button type="button" id="f-pet" class="toggle-btn ${building && building.petAllowed ? 'on' : ''}" onclick="this.classList.toggle('on')"><span class="tg-dot"></span>애완</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">전세 대출</label>
+      <button type="button" id="f-jeonse-loan" class="toggle-btn full ${building && building.jeonseLoanAvailable ? 'on' : ''}" onclick="toggleJeonseLoan()"><span class="tg-dot"></span>전세 대출 가능</button>
+      <select id="f-jeonse-loan-type" class="form-select" style="margin-top:8px;display:${building && building.jeonseLoanAvailable ? 'block' : 'none'};">
+        ${['HUG','HF','SGI','버팀목','LH'].map(v => `<option value="${v}" ${building && building.jeonseLoanType === v ? 'selected' : ''}>${v}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
       <label class="form-label">사진/미디어 <span style="font-weight:400;color:#9ca3af;">(최대 ${MAX_BUILDING_IMAGES}장 · <span id="bf-count">0 / ${MAX_BUILDING_IMAGES}</span>)</span></label>
       <input id="f-media" class="form-input" type="file" accept="image/*,video/*" multiple onchange="addBfFiles(event)">
       <div id="bf-new-preview" class="bf-thumb-wrap"></div>
@@ -1496,10 +1517,15 @@ async function saveBuilding(id, lat, lng) {
     const name = document.getElementById('f-name').value.trim();
     if (!name) { showToast('건물명을 입력하세요'); return; }
 
+    const jeonseLoanAvailable = document.getElementById('f-jeonse-loan').classList.contains('on');
     const dto = {
         name,
         address: document.getElementById('f-addr').value.trim(),
         type: document.getElementById('f-type').value,
+        jeonseLoanAvailable,
+        jeonseLoanType: jeonseLoanAvailable ? document.getElementById('f-jeonse-loan-type').value : null,
+        parkingAvailable: document.getElementById('f-parking').classList.contains('on'),
+        petAllowed: document.getElementById('f-pet').classList.contains('on'),
         lat: parseFloat(lat), lng: parseFloat(lng)
     };
 
@@ -1617,7 +1643,7 @@ function renderUnitTab(tab) {
       <div class="building-info-grid">
         <div class="info-card"><div class="info-card-label">호실</div><div class="info-card-value">${u.name}</div></div>
         <div class="info-card"><div class="info-card-label">면적</div><div class="info-card-value">${u.area}㎡</div></div>
-        <div class="info-card"><div class="info-card-label">유형</div><div class="info-card-value">${{commercial:'상가',residential:'주거',office:'사무실'}[u.type]||u.type}</div></div>
+        <div class="info-card"><div class="info-card-label">유형</div><div class="info-card-value">${TYPE_LABEL[u.type] || {residential:'주거용',office:'사무용'}[u.type] || u.type}</div></div>
         <div class="info-card"><div class="info-card-label">거래</div><div class="info-card-value">${DEAL_LABEL[inferDeal(u)]}</div></div>
       </div>
     `;
@@ -1670,9 +1696,12 @@ function openUnitForm(buildingId, unitId) {
       <div class="form-group">
         <label class="form-label">유형</label>
         <select id="uf-type" class="form-select">
+          <option value="house" ${(!u || u.type==='house')?'selected':''}>단독&다중</option>
+          <option value="multiplex" ${u && u.type==='multiplex'?'selected':''}>다세대</option>
+          <option value="officetel" ${u && u.type==='officetel'?'selected':''}>오피스텔</option>
+          <option value="apartment" ${u && u.type==='apartment'?'selected':''}>아파트</option>
+          <option value="neighborhood" ${u && u.type==='neighborhood'?'selected':''}>근린생활시설</option>
           <option value="commercial" ${u && u.type==='commercial'?'selected':''}>상가</option>
-          <option value="residential" ${u && u.type==='residential'?'selected':''}>주거용</option>
-          <option value="office" ${u && u.type==='office'?'selected':''}>사무용</option>
         </select>
       </div>
     </div>
@@ -1739,6 +1768,14 @@ function selectStatus(status) {
     document.querySelectorAll('.status-option').forEach(el => {
         el.classList.toggle('selected', el.dataset.status === status);
     });
+}
+
+// 전세 대출 가능 토글 — 켜지면 대출 종류 콤보박스 노출
+function toggleJeonseLoan() {
+    const btn = document.getElementById('f-jeonse-loan');
+    const sel = document.getElementById('f-jeonse-loan-type');
+    const on = btn.classList.toggle('on');
+    if (sel) sel.style.display = on ? 'block' : 'none';
 }
 
 // 거래유형 선택 — scope='f'(건물) 또는 'uf'(호실).

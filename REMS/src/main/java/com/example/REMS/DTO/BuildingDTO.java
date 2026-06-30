@@ -41,6 +41,13 @@ public class BuildingDTO {
     // 거래유형 (sale=매매 / jeonse=전세 / monthly=월세)
     private String dealType;
 
+    // 전세 대출 가능 여부 + 종류
+    private Boolean jeonseLoanAvailable;
+    private String jeonseLoanType;
+    // 옵션 — 주차 / 애완
+    private Boolean parkingAvailable;
+    private Boolean petAllowed;
+
     public static BuildingDTO entityToDto(BuildingEntity buildingEntity) {
         List<UnitDTO> unitDTOs = buildingEntity.getUnits().stream()
                 .map(UnitDTO::entityToDto)
@@ -71,7 +78,11 @@ public class BuildingDTO {
                 mediaURLs,
                 unitDTOs,
                 deletedAtMillis,
-                buildingEntity.getDealType());
+                buildingEntity.getDealType(),
+                buildingEntity.getJeonseLoanAvailable(),
+                buildingEntity.getJeonseLoanType(),
+                buildingEntity.getParkingAvailable(),
+                buildingEntity.getPetAllowed());
     }
 
     public BuildingEntity dtoToEntity(UserEntity owner) {
@@ -88,6 +99,10 @@ public class BuildingDTO {
                 .manage(manage)
                 .memo(memo)
                 .dealType(dealType)
+                .jeonseLoanAvailable(jeonseLoanAvailable)
+                .jeonseLoanType(jeonseLoanType)
+                .parkingAvailable(parkingAvailable)
+                .petAllowed(petAllowed)
                 .mediaURLs(mediaURLs != null ? new ArrayList<>(mediaURLs) : new ArrayList<>())
                 .owner(owner)
                 .units(new ArrayList<>())
