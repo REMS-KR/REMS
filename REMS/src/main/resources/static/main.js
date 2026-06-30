@@ -403,6 +403,9 @@ async function initMap() {
     // 사용자가 직접 지도를 움직이면, 뒤늦게 도착한 현재위치로 화면이 튀지 않도록 자동 센터링 취소
     naver.maps.Event.addListener(map, 'dragstart', function () { _suppressAutoCenter = true; });
 
+    // 줌/이동이 멈출 때마다 픽셀 거리 기준으로 다시 묶음 → 확대하면 자동으로 풀림
+    naver.maps.Event.addListener(map, 'idle', scheduleRenderMarkers);
+
     await loadData(true);
     renderMarkers();
     updateStats();
@@ -563,31 +566,37 @@ function formatPriceLabel(b) {
     return depStr;                               // 매매·전세 등 단일 금액
 }
 
-function renderMarkers() {
-    overlays.forEach(o => o.setMap(null));
-    overlays = [];
+// =====================================================
+// MARKER + CLUSTERING
+//  · 화면 픽셀 거리(CLUSTER_PX) 기준으로 가까운 매물을 한 개의 동그라미(숫자) 마커로 묶는다.
+//  · 픽셀 거리 기준이므로 "확대할수록" 점들이 화면에서 멀어져 자동으로 풀린다(declustering).
+//  · 클러스터 마커를 누르면 그 안의 매물들이 하단 시트에 목록으로 펼쳐진다.
+// =====================================================
+const CLUSTER_PX = 64;          // 이 픽셀 거리 안에 있으면 한 덩어리로 묶음(매물 간 최소 간격 기준점)
+let clusterGroups = {};         // { 키: [건물id, ...] } — 클러스터 클릭 시 목록 복원용
+let _markerRaf = 0;             // idle 연타 디바운스용
 
-    state.buildings.forEach(b => {
-        if (!matchesFilter(b)) return;
+// 단일 건물 → 가격 말풍선 마커 (제목 1줄 + 가격 1줄, 각 줄은 가로로만 — 절대 줄바꿈 안 됨)
+function addBuildingMarker(b) {
+    const unitStats = getUnitStats(b);
+    const dominant = unitStats.empty > 0 ? 'empty' : (unitStats.expiring > 0 ? 'expiring' : 'occupied');
+    const color = STATUS_COLOR[dominant];
+    const priceLabel = formatPriceLabel(b);   // 보증금/월세 또는 단일 금액 (관리비 제외)
 
-        const unitStats = getUnitStats(b);
-        const dominant = unitStats.empty > 0 ? 'empty' : (unitStats.expiring > 0 ? 'expiring' : 'occupied');
-        const color = STATUS_COLOR[dominant];
-        const priceLabel = formatPriceLabel(b);   // 보증금/월세 또는 단일 금액 (관리비 제외)
-
-        const content = `
+    const content = `
       <div onclick="selectBuilding('${b.id}')" style="
         position:relative; cursor:pointer;
         background:white; border:2px solid ${color};
-        border-radius:9px; padding:3px 7px;
+        border-radius:9px; padding:3px 8px;
         box-shadow:0 2px 7px rgba(0,0,0,0.16);
         font-family:-apple-system,sans-serif;
-        min-width:52px; text-align:center;
+        width:max-content; max-width:180px; text-align:center;
         transform:translateX(-50%) translateY(-100%);
         margin-bottom:7px;
       ">
-        <div style="font-size:10.5px;font-weight:700;color:#111;line-height:1.2;">${b.name}</div>
-        ${priceLabel ? `<div style="font-size:11px;color:#1a56db;font-weight:800;margin-top:1px;letter-spacing:-0.2px;line-height:1.2;">${priceLabel}</div>` : ''}
+        <div style="font-size:10.5px;font-weight:700;color:#111;line-height:1.25;
+          white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(b.name)}</div>
+        ${priceLabel ? `<div style="font-size:11px;color:#1a56db;font-weight:800;margin-top:1px;letter-spacing:-0.2px;line-height:1.25;white-space:nowrap;">${escapeHtml(priceLabel)}</div>` : ''}
         <div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);
           width:0;height:0;border-left:6px solid transparent;
           border-right:6px solid transparent;border-top:6px solid ${color};">
@@ -595,18 +604,138 @@ function renderMarkers() {
       </div>
     `;
 
-        // 네이버는 Marker 객체의 icon: { content } 속성으로 HTML 커스텀 마커를 지원합니다.
-        const overlay = new naver.maps.Marker({
-            position: new naver.maps.LatLng(b.lat, b.lng),
-            map: map,
-            icon: {
-                content: content,
-                size: new naver.maps.Size(52, 34),
-                anchor: new naver.maps.Point(0, 0) // CSS transform으로 중심을 맞췄으므로 여기선 0,0 처리
-            }
-        });
-        overlays.push(overlay);
+    const overlay = new naver.maps.Marker({
+        position: new naver.maps.LatLng(b.lat, b.lng),
+        map: map,
+        icon: {
+            content: content,
+            size: new naver.maps.Size(52, 34),
+            anchor: new naver.maps.Point(0, 0) // CSS transform으로 중심을 맞췄으므로 0,0
+        }
     });
+    overlays.push(overlay);
+}
+
+// 여러 건물 → 숫자 동그라미(클러스터) 마커
+function addClusterMarker(key, members) {
+    // 묶인 매물의 상태를 합쳐 대표 색상 결정 (공실>만기>임차 우선)
+    let anyEmpty = false, anyExpiring = false;
+    members.forEach(b => {
+        const s = getUnitStats(b);
+        if (s.empty > 0) anyEmpty = true;
+        if (s.expiring > 0) anyExpiring = true;
+    });
+    const color = anyEmpty ? STATUS_COLOR.empty : (anyExpiring ? STATUS_COLOR.expiring : STATUS_COLOR.occupied);
+
+    // 묶인 매물 개수에 따라 동그라미 크기 살짝 키움
+    const n = members.length;
+    const size = n >= 100 ? 54 : (n >= 10 ? 48 : 42);
+
+    // 중심 좌표 = 멤버 좌표 평균
+    let lat = 0, lng = 0;
+    members.forEach(b => { lat += b.lat; lng += b.lng; });
+    lat /= n; lng /= n;
+
+    const content = `
+      <div onclick="openCluster('${key}')" class="cluster-marker"
+           style="--c:${color}; width:${size}px; height:${size}px; font-size:${n >= 100 ? 13 : 14}px;">
+        <span class="cluster-count">${n}</span>
+      </div>`;
+
+    const overlay = new naver.maps.Marker({
+        position: new naver.maps.LatLng(lat, lng),
+        map: map,
+        zIndex: 50,
+        icon: {
+            content: content,
+            size: new naver.maps.Size(size, size),
+            anchor: new naver.maps.Point(0, 0) // CSS transform: translate(-50%,-50%) 로 중심 정렬
+        }
+    });
+    overlays.push(overlay);
+}
+
+// 현재 줌/화면 기준으로 건물들을 픽셀 거리로 묶는다(그리디).
+// 투영을 못 구하면(아주 이른 시점 등) 클러스터 없이 개별 마커로 폴백.
+function clusterBuildings(list) {
+    const proj = map && map.getProjection && map.getProjection();
+    if (!proj || typeof proj.fromCoordToOffset !== 'function') {
+        return list.map(b => ({ members: [b] }));
+    }
+    const pts = list.map(b => {
+        let p = null;
+        try { p = proj.fromCoordToOffset(new naver.maps.LatLng(b.lat, b.lng)); } catch (_) {}
+        return { b, x: p ? p.x : null, y: p ? p.y : null };
+    });
+    if (!pts.every(p => p.x != null && p.y != null)) {
+        return list.map(b => ({ members: [b] }));   // 투영 실패 → 폴백
+    }
+    const R2 = CLUSTER_PX * CLUSTER_PX;
+    const used = new Array(pts.length).fill(false);
+    const clusters = [];
+    for (let i = 0; i < pts.length; i++) {
+        if (used[i]) continue;
+        used[i] = true;
+        const group = [pts[i].b];
+        for (let j = i + 1; j < pts.length; j++) {
+            if (used[j]) continue;
+            const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
+            if (dx * dx + dy * dy <= R2) { used[j] = true; group.push(pts[j].b); }
+        }
+        clusters.push({ members: group });
+    }
+    return clusters;
+}
+
+function renderMarkers() {
+    overlays.forEach(o => o.setMap(null));
+    overlays = [];
+    clusterGroups = {};
+    if (!map) return;
+
+    const visible = state.buildings.filter(matchesFilter);
+    const clusters = clusterBuildings(visible);
+    clusters.forEach((c, idx) => {
+        if (c.members.length === 1) {
+            addBuildingMarker(c.members[0]);
+        } else {
+            const key = 'cl' + idx;
+            clusterGroups[key] = c.members.map(b => b.id);
+            addClusterMarker(key, c.members);
+        }
+    });
+}
+
+// idle(이동/줌 멈춤) 마다 다시 클러스터링 — 같은 프레임 연타는 1회로 합침
+function scheduleRenderMarkers() {
+    if (_markerRaf) return;
+    _markerRaf = requestAnimationFrame(() => { _markerRaf = 0; renderMarkers(); });
+}
+
+// 클러스터 동그라미 클릭 → 그 안의 매물들을 하단 시트에 목록으로 펼침
+function openCluster(key) {
+    const ids = clusterGroups[key] || [];
+    const items = ids.map(id => state.buildings.find(b => b.id === id)).filter(Boolean);
+    if (!items.length) return;
+
+    // 클러스터 중심으로 살짝 이동(목록과 위치 감각을 맞춤)
+    if (map && items.length) {
+        let lat = 0, lng = 0;
+        items.forEach(b => { lat += b.lat; lng += b.lng; });
+        map.panTo(new naver.maps.LatLng(lat / items.length, lng / items.length));
+    }
+    showClusterList(items);
+    markTab('map');
+    Sheet.open('building', 'full');
+}
+
+// 클러스터 안의 매물 목록 — 하단 메뉴 '목록'과 동일한 카드 스타일 재사용
+function showClusterList(items) {
+    document.getElementById('sheet-title').textContent = '이 위치의 매물';
+    document.getElementById('sheet-subtitle').textContent = `${items.length}개 매물이 모여 있습니다`;
+    const body = document.getElementById('sheet-body');
+    body.innerHTML = items.map(buildingListItemHTML).join('');
+    hydrateOwnerNames(body);
 }
 
 function matchesFilter(b) {
@@ -821,24 +950,29 @@ function showBuildingList() {
         return;
     }
 
-    body.innerHTML = state.buildings.map(b => {
-        const s = getUnitStats(b);
-        const pct = s.total > 0 ? Math.round((s.occupied / s.total) * 100) : 0;
-        const emoji = typeIcon(b.type, 26); // [B/E] edit by smsong - 유형 라인 아이콘(기본 이모지 대체)
-        // 실제 오브젝트에 첨부된 첫 번째 이미지를 썸네일로 사용 (없거나 로드 실패 시 타입 이모지)
-        const firstImg = (b.mediaURLs && b.mediaURLs.length) ? b.mediaURLs[0] : '';
-        const thumb = firstImg
-            ? `<div class="building-thumb has-img"><img src="${firstImg}" alt="" loading="lazy" onerror="this.remove();this.parentElement.classList.remove('has-img')"><span class="building-thumb-emoji">${emoji}</span></div>`
-            : `<div class="building-thumb"><span class="building-thumb-emoji">${emoji}</span></div>`;
-        return `<div class="building-list-item" onclick="selectBuilding('${b.id}')">
+    body.innerHTML = state.buildings.map(buildingListItemHTML).join('');
+    hydrateOwnerNames(body); // [B/E] edit by smsong - 목록 잠금 배지의 등록자 이름 채우기
+}
+
+// 건물 목록 카드 1개 마크업 — 목록 탭 / 클러스터 목록에서 공용으로 사용
+function buildingListItemHTML(b) {
+    const s = getUnitStats(b);
+    const pct = s.total > 0 ? Math.round((s.occupied / s.total) * 100) : 0;
+    const emoji = typeIcon(b.type, 26); // [B/E] edit by smsong - 유형 라인 아이콘(기본 이모지 대체)
+    // 실제 오브젝트에 첨부된 첫 번째 이미지를 썸네일로 사용 (없거나 로드 실패 시 타입 이모지)
+    const firstImg = (b.mediaURLs && b.mediaURLs.length) ? b.mediaURLs[0] : '';
+    const thumb = firstImg
+        ? `<div class="building-thumb has-img"><img src="${firstImg}" alt="" loading="lazy" onerror="this.remove();this.parentElement.classList.remove('has-img')"><span class="building-thumb-emoji">${emoji}</span></div>`
+        : `<div class="building-thumb"><span class="building-thumb-emoji">${emoji}</span></div>`;
+    return `<div class="building-list-item" onclick="selectBuilding('${b.id}')">
       ${thumb}
       <div style="flex:1;min-width:0;">
         <div class="building-list-name">${b.name}</div>
         <div class="building-list-addr">${b.address}</div>
         <div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
           ${isMine(b)
-            ? '<span style="font-size:10.5px;color:#1a56db;background:#e8f0fe;font-weight:700;padding:1px 7px;border-radius:10px;">내 매물</span>'
-            : (ownerIdOf(b) ? `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10.5px;color:#6b7280;background:#f3f4f6;font-weight:600;padding:1px 7px;border-radius:10px;">${icon('lock',11)} ${ownerNameSpan(b)}</span>` : '')}
+        ? '<span style="font-size:10.5px;color:#1a56db;background:#e8f0fe;font-weight:700;padding:1px 7px;border-radius:10px;">내 매물</span>'
+        : (ownerIdOf(b) ? `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10.5px;color:#6b7280;background:#f3f4f6;font-weight:600;padding:1px 7px;border-radius:10px;">${icon('lock', 11)} ${ownerNameSpan(b)}</span>` : '')}
           ${s.empty > 0 ? `<span style="font-size:11px;color:#dc2626;font-weight:600;">공실 ${s.empty}</span>` : ''}
           ${s.expiring > 0 ? `<span style="font-size:11px;color:#d97706;font-weight:600;">만기 ${s.expiring}</span>` : ''}
         </div>
@@ -849,8 +983,6 @@ function showBuildingList() {
         <div class="occupancy-bar"><div class="occupancy-fill" style="width:${pct}%"></div></div>
       </div>
     </div>`;
-    }).join('');
-    hydrateOwnerNames(body); // [B/E] edit by smsong - 목록 잠금 배지의 등록자 이름 채우기
 }
 
 // 현재 로그인 사용자가 이 오브젝트(건물/호실)의 작성자인지 확인 → 위쪽 isMine()으로 통합됨
@@ -930,31 +1062,73 @@ function showBuildingDetail(b) {
       </div>
     </div>
 
-    <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:8px;">호실 현황</div>
-    <div class="unit-list">
-      ${b.units.length === 0 ? '<div style="text-align:center;padding:20px;color:#9ca3af;font-size:14px;">등록된 호실이 없습니다</div>' :
-        b.units.map(u => `
-          <div class="unit-item ${u.status}" onclick="openUnitDetail('${b.id}','${u.id}')">
-            <div>
-              <div class="unit-status-badge">${STATUS_LABEL[u.status]}</div>
-            </div>
-            <div style="flex:1;min-width:0;">
-              <div class="unit-name">${u.name} <span style="font-weight:400;color:#9ca3af;font-size:12px;">${u.floor}층</span></div>
-              <div class="unit-detail">${u.area}㎡ · ${u.tenant || '공실'}</div>
-            </div>
-            <div class="unit-rent">
-              ${u.status !== 'empty' ? `
-                <div class="unit-rent-main">${u.rent > 0 ? u.rent.toLocaleString()+'만원' : '전세'}</div>
-                <div class="unit-rent-sub">보 ${u.deposit.toLocaleString()}만</div>
-              ` : '<div class="unit-rent-main" style="color:#dc2626;">공실</div>'}
-            </div>
-          </div>
-        `).join('')
-    }
-    </div>
+    ${renderUnitStatus(b)}
   `;
     hydrateOwnerCard(b);
     hydrateOwnerNames(body); // [B/E] edit by smsong - 조회전용 잠금 라벨 등록자 이름 채우기
+}
+
+// =====================================================
+// 호실 현황 — 점유율 스택바 + 범례 + 상태 레일 카드 (앱 톤: 블루/라운드/라인 아이콘)
+// =====================================================
+function renderUnitStatus(b) {
+    const units = b.units || [];
+    const s = getUnitStats(b);
+    const total = s.total || 0;
+    const occPct = total > 0 ? Math.round((s.occupied / s.total) * 100) : 0;
+
+    // 점유율 스택바 (임차=초록 / 만기임박=주황 / 공실=빨강)
+    const seg = (n, varName) => n > 0
+        ? `<div class="uf-seg" style="flex:${n};background:var(${varName});"></div>` : '';
+    const barInner = total > 0
+        ? seg(s.occupied, '--green') + seg(s.expiring, '--amber') + seg(s.empty, '--red')
+        : '<div class="uf-seg" style="flex:1;background:var(--gray-200);"></div>';
+
+    // 범례 칩 — 0개인 상태는 흐리게
+    const leg = (label, n, cls) =>
+        `<span class="uf-leg ${n > 0 ? cls : 'is-zero'}"><i class="uf-dot ${cls}"></i>${label} <b>${n}</b></span>`;
+
+    const head = `
+      <div class="uf-head">
+        <div class="uf-head-title">호실 현황 <span class="uf-total">${total}</span></div>
+        <div class="uf-occ"><b>${occPct}%</b><span>점유</span></div>
+      </div>
+      <div class="uf-bar">${barInner}</div>
+      <div class="uf-legend">
+        ${leg('임차', s.occupied, 'occupied')}
+        ${leg('만기임박', s.expiring, 'expiring')}
+        ${leg('공실', s.empty, 'empty')}
+      </div>`;
+
+    if (units.length === 0) {
+        return `<div class="uf-block">
+          ${head}
+          <div class="uf-empty">${icon('building', 30, 'color:var(--gray-300);')}<span>등록된 호실이 없습니다</span></div>
+        </div>`;
+    }
+
+    const rows = units.map(u => {
+        const rent = (u.status !== 'empty')
+            ? `<div class="uf-rent-main">${u.rent > 0 ? u.rent.toLocaleString() + '<i>만</i>' : '전세'}</div>
+               <div class="uf-rent-sub">보 ${(u.deposit || 0).toLocaleString()}</div>`
+            : `<div class="uf-rent-main uf-rent-empty">비어있음</div>`;
+        return `
+          <button type="button" class="uf-unit ${u.status}" onclick="openUnitDetail('${b.id}','${u.id}')">
+            <span class="uf-rail"></span>
+            <span class="uf-chip">${STATUS_LABEL[u.status]}</span>
+            <span class="uf-unit-main">
+              <span class="uf-unit-name">${escapeHtml(u.name || '')}<i class="uf-floor">${u.floor}F</i></span>
+              <span class="uf-unit-sub">${u.area}㎡ · ${escapeHtml(u.tenant || '공실')}</span>
+            </span>
+            <span class="uf-rent">${rent}</span>
+            <span class="uf-go">${icon('back', 15, 'transform:rotate(180deg);color:var(--gray-300);')}</span>
+          </button>`;
+    }).join('');
+
+    return `<div class="uf-block">
+      ${head}
+      <div class="uf-list">${rows}</div>
+    </div>`;
 }
 
 // 매물 등록자 카드 채우기 — 등록자 프로필을 비동기로 불러와 이름/사진/제공자 표시

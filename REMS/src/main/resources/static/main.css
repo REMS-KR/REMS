@@ -925,3 +925,132 @@ html.mode-web #modal {
 .trash-btn.restore:active { filter: brightness(0.96); }
 .trash-btn.purge { color: var(--red); background: #fff; border-color: var(--red-light); }
 .trash-btn.purge:active { background: var(--red-light); }
+
+/* ===================================================== */
+/* 클러스터(숫자 동그라미) 마커 — 가까운 매물 묶음               */
+/* ===================================================== */
+.cluster-marker {
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: var(--c, var(--blue));
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-family: var(--font);
+    letter-spacing: -0.3px;
+    border: 3px solid #fff;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.28);
+    cursor: pointer; position: relative;
+    transition: transform 0.12s ease;
+}
+.cluster-marker::after {           /* 부드러운 후광 */
+    content: ''; position: absolute; inset: -7px;
+    border-radius: 50%; background: var(--c, var(--blue));
+    opacity: 0.18; z-index: -1;
+}
+.cluster-marker:active { transform: translate(-50%, -50%) scale(0.94); }
+.cluster-count { line-height: 1; }
+
+/* ===================================================== */
+/* 호실 현황 (uf-) — 점유율 스택바 + 상태 레일 카드             */
+/* ===================================================== */
+.uf-block { margin-top: 4px; }
+
+/* 헤더: 제목 + 점유율 */
+.uf-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 10px; }
+.uf-head-title {
+    font-size: 14px; font-weight: 800; color: var(--gray-900);
+    letter-spacing: -0.3px; display: flex; align-items: center; gap: 7px;
+}
+.uf-total {
+    font-size: 11px; font-weight: 700; color: var(--blue);
+    background: var(--blue-light); border-radius: 999px;
+    padding: 2px 8px; line-height: 1.4;
+}
+.uf-occ { display: flex; align-items: baseline; gap: 4px; }
+.uf-occ b { font-size: 18px; font-weight: 800; color: var(--blue); letter-spacing: -0.5px; }
+.uf-occ span { font-size: 11px; font-weight: 600; color: var(--gray-400); }
+
+/* 점유율 스택바 */
+.uf-bar {
+    display: flex; height: 8px; border-radius: 999px; overflow: hidden;
+    background: var(--gray-100); gap: 2px;
+}
+.uf-seg { height: 100%; min-width: 3px; }
+.uf-bar .uf-seg:first-child { border-top-left-radius: 999px; border-bottom-left-radius: 999px; }
+.uf-bar .uf-seg:last-child  { border-top-right-radius: 999px; border-bottom-right-radius: 999px; }
+
+/* 범례 */
+.uf-legend { display: flex; gap: 14px; margin: 10px 0 14px; flex-wrap: wrap; }
+.uf-leg {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600; color: var(--gray-600);
+}
+.uf-leg b { font-weight: 800; color: var(--gray-900); }
+.uf-leg.is-zero { opacity: 0.4; }
+.uf-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.uf-dot.occupied { background: var(--green); }
+.uf-dot.expiring { background: var(--amber); }
+.uf-dot.empty    { background: var(--red); }
+
+/* 호실 카드 목록 */
+.uf-list { display: flex; flex-direction: column; gap: 8px; }
+.uf-unit {
+    position: relative; width: 100%;
+    display: flex; align-items: center; gap: 11px;
+    padding: 12px 12px 12px 16px;
+    border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+    background: var(--white); cursor: pointer; text-align: left;
+    font-family: var(--font); overflow: hidden;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.08s;
+}
+.uf-unit:active { transform: scale(0.992); background: var(--gray-50); }
+.uf-unit:hover { box-shadow: var(--shadow-sm); }
+
+/* 왼쪽 상태 레일 (세로 색띠) */
+.uf-rail { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; }
+.uf-unit.occupied .uf-rail { background: var(--green); }
+.uf-unit.expiring .uf-rail { background: var(--amber); }
+.uf-unit.empty    .uf-rail { background: var(--red); }
+.uf-unit.empty { background: linear-gradient(90deg, rgba(220,38,38,0.04), transparent 40%); }
+
+/* 상태 칩 */
+.uf-chip {
+    flex-shrink: 0; font-size: 11px; font-weight: 800; letter-spacing: -0.2px;
+    padding: 5px 9px; border-radius: 8px; line-height: 1;
+    white-space: nowrap;
+}
+.uf-unit.occupied .uf-chip { background: var(--green-light); color: var(--green); }
+.uf-unit.expiring .uf-chip { background: var(--amber-light); color: var(--amber); }
+.uf-unit.empty    .uf-chip { background: var(--red-light);   color: var(--red); }
+
+/* 가운데: 호실명 + 부가정보 */
+.uf-unit-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.uf-unit-name {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 14px; font-weight: 700; color: var(--gray-900);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.uf-floor {
+    flex-shrink: 0; font-style: normal; font-size: 10.5px; font-weight: 700;
+    color: var(--gray-500); background: var(--gray-100);
+    border-radius: 6px; padding: 1px 6px; letter-spacing: 0.2px;
+}
+.uf-unit-sub {
+    font-size: 12px; color: var(--gray-500);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* 오른쪽: 임대료 */
+.uf-rent { flex-shrink: 0; text-align: right; line-height: 1.25; }
+.uf-rent-main { font-size: 14px; font-weight: 800; color: var(--gray-900); letter-spacing: -0.3px; }
+.uf-rent-main i { font-style: normal; font-size: 11px; font-weight: 700; color: var(--gray-400); margin-left: 1px; }
+.uf-rent-sub { font-size: 11px; color: var(--gray-400); font-weight: 600; margin-top: 1px; }
+.uf-rent-empty { color: var(--red); font-size: 13px; }
+
+.uf-go { flex-shrink: 0; display: inline-flex; margin-left: -2px; }
+
+/* 빈 상태 */
+.uf-empty {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 26px 0; color: var(--gray-400); font-size: 13px; font-weight: 500;
+}
