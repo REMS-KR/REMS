@@ -176,6 +176,15 @@ public class BuildingService {
                 .collect(Collectors.toList());
     }
 
+    // 거래유형별 필터 (sale/jeonse/monthly) — 정상(휴지통 아님) 건물만
+    @Transactional(readOnly = true)
+    public List<BuildingDTO> findByDealType(String uid, String dealType, UserDetails userDetails) {
+        checkAuth(uid, userDetails);
+        return buildingRepository.findByDealTypeAndDeletedAtIsNull(dealType).stream()
+                .map(BuildingDTO::entityToDto)
+                .collect(Collectors.toList());
+    }
+
     // 건물 수정 — 작성자 본인만
     //  - buildingDTO.mediaURLs : 유지할 기존 이미지 URL 목록 (UI에서 제거한 건 빠져있음)
     //  - mediaFiles            : 새로 추가 업로드할 파일들
@@ -196,6 +205,7 @@ public class BuildingService {
         buildingEntity.setDeposit(buildingDTO.getDeposit());
         buildingEntity.setRent(buildingDTO.getRent());
         buildingEntity.setManage(buildingDTO.getManage());
+        buildingEntity.setDealType(buildingDTO.getDealType());
         buildingEntity.setMemo(buildingDTO.getMemo());
 
         // 유지할 기존 이미지 + 새로 업로드한 이미지 병합

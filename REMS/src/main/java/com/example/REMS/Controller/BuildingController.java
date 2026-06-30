@@ -70,6 +70,15 @@ public class BuildingController {
         return ResponseEntity.ok(buildingService.findByType(uid, type, userDetails));
     }
 
+    // 거래유형별 필터 (sale=매매 / jeonse=전세 / monthly=월세)
+    @Operation(summary = "거래유형별 필터")
+    @GetMapping("/dealType/{uid}/{dealType}")
+    public ResponseEntity<List<BuildingDTO>> findByDealType(@PathVariable("uid") String uid,
+                                                            @PathVariable("dealType") String dealType,
+                                                            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(buildingService.findByDealType(uid, dealType, userDetails));
+    }
+
     // 건물 수정 (multipart: uid / buildingData(JSON, id + 유지할 mediaURLs 포함) / mediaData(새 파일 여러 개, 선택))
     @SneakyThrows
     @Operation(summary = "건물 수정")

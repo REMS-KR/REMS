@@ -25,6 +25,7 @@ public class UnitDTO {
     private String contractStart;
     private String contractEnd;
     private String memo;
+    private String dealType;    // 거래유형 (sale=매매 / jeonse=전세 / monthly=월세)
 
     public static UnitDTO entityToDto(UnitEntity unitEntity) {
         return new UnitDTO(
@@ -42,7 +43,8 @@ public class UnitDTO {
                 unitEntity.getManage(),
                 unitEntity.getContractStart(),
                 unitEntity.getContractEnd(),
-                unitEntity.getMemo());
+                unitEntity.getMemo(),
+                unitEntity.getDealType());
     }
 
     // 작성자(owner)를 지정하여 엔티티로 변환
@@ -62,6 +64,7 @@ public class UnitDTO {
                 .contractStart(contractStart)
                 .contractEnd(contractEnd)
                 .memo(memo)
+                .dealType(dealType)
                 .build();
     }
 

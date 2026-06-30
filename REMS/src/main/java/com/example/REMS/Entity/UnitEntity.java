@@ -24,6 +24,7 @@ public class UnitEntity {
     private int deposit;        // 보증금 (만원)
     private int rent;           // 월세 (만원)
     private int manage;         // 관리비 (만원)
+    private String dealType;    // 거래유형 (sale=매매 / jeonse=전세 / monthly=월세)
     private String contractStart;   // 계약 시작 (yyyy-MM-dd)
     private String contractEnd;     // 계약 만료 (yyyy-MM-dd)
 

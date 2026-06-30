@@ -38,6 +38,9 @@ public class BuildingDTO {
     // 휴지통 이동 시각(epoch millis). null 이면 정상. 응답 표시용(읽기 전용).
     private Long deletedAt;
 
+    // 거래유형 (sale=매매 / jeonse=전세 / monthly=월세)
+    private String dealType;
+
     public static BuildingDTO entityToDto(BuildingEntity buildingEntity) {
         List<UnitDTO> unitDTOs = buildingEntity.getUnits().stream()
                 .map(UnitDTO::entityToDto)
@@ -67,7 +70,8 @@ public class BuildingDTO {
                 ownerUid,
                 mediaURLs,
                 unitDTOs,
-                deletedAtMillis);
+                deletedAtMillis,
+                buildingEntity.getDealType());
     }
 
     public BuildingEntity dtoToEntity(UserEntity owner) {
@@ -83,6 +87,7 @@ public class BuildingDTO {
                 .rent(rent)
                 .manage(manage)
                 .memo(memo)
+                .dealType(dealType)
                 .mediaURLs(mediaURLs != null ? new ArrayList<>(mediaURLs) : new ArrayList<>())
                 .owner(owner)
                 .units(new ArrayList<>())

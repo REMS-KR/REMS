@@ -109,6 +109,7 @@ public class UnitService {
         unitEntity.setDeposit(unitDTO.getDeposit());
         unitEntity.setRent(unitDTO.getRent());
         unitEntity.setManage(unitDTO.getManage());
+        unitEntity.setDealType(unitDTO.getDealType());
         unitEntity.setContractStart(unitDTO.getContractStart());
         unitEntity.setContractEnd(unitDTO.getContractEnd());
         unitEntity.setMemo(unitDTO.getMemo());

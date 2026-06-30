@@ -1085,3 +1085,36 @@ html.mode-web #modal {
     font-size: 13.5px; font-weight: 700; color: var(--gray-700);
     letter-spacing: -0.2px; font-family: var(--font);
 }
+
+/* ===================================================== */
+/* 거래유형 (매매/전세/월세) — 선택기 · 배지                    */
+/* ===================================================== */
+/* 폼 안의 세그먼트 선택기 (status-selector 와 동일한 톤) */
+.deal-selector { display: flex; gap: 8px; }
+.deal-option {
+    flex: 1; padding: 9px 6px; border-radius: 10px;
+    border: 1.5px solid var(--gray-200); text-align: center;
+    cursor: pointer; font-size: 13px; font-weight: 700; color: var(--gray-500);
+    transition: all 0.15s;
+}
+.deal-option[data-deal="sale"]    { color: #7c3aed; }
+.deal-option[data-deal="jeonse"]  { color: var(--blue); }
+.deal-option[data-deal="monthly"] { color: var(--green); }
+.deal-option.selected[data-deal="sale"]    { background: #f3e8ff; border-color: #7c3aed; }
+.deal-option.selected[data-deal="jeonse"]  { background: var(--blue-light); border-color: var(--blue); }
+.deal-option.selected[data-deal="monthly"] { background: var(--green-light); border-color: var(--green); }
+
+/* 거래유형 배지 — 목록/상세/마커 공용 색칩 */
+.deal-badge {
+    display: inline-flex; align-items: center; flex-shrink: 0;
+    font-weight: 800; line-height: 1; letter-spacing: -0.2px;
+    color: #fff; background: var(--dc, var(--blue));
+    border-radius: 6px; padding: 2px 6px;
+}
+
+/* 호실 현황 행의 거래유형 미니 태그 */
+.uf-deal {
+    flex-shrink: 0; font-style: normal; font-size: 10px; font-weight: 800;
+    color: #fff; background: var(--dc, var(--blue));
+    border-radius: 5px; padding: 1px 5px; letter-spacing: 0.2px;
+}

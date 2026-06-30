@@ -376,6 +376,29 @@ const STATUS_LABEL = { empty: '공실', occupied: '임차', expiring: '만기임
 const TYPE_EMOJI = { house: '🏠', multiplex: '🏘️', officetel: '🏢', commercial: '🏪' };
 const TYPE_LABEL = { house: '단독&다중', multiplex: '다세대', officetel: '오피스텔', commercial: '상가' };
 
+// 거래유형 (sale=매매 / jeonse=전세 / monthly=월세)
+const DEAL_LABEL = { sale: '매매', jeonse: '전세', monthly: '월세' };
+const DEAL_COLOR = { sale: '#7c3aed', jeonse: '#1a56db', monthly: '#0d9451' }; // 매매 보라 · 전세 블루 · 월세 그린
+const DEAL_CODES = ['sale', 'jeonse', 'monthly'];
+
+// 거래유형 결정: 명시값이 있으면 그대로, 없으면(구 데이터) 가격으로 추정.
+//  · 월세>0  → 월세(monthly)
+//  · 보증금만 → 전세(jeonse)
+//  · 매매는 가격만으론 전세와 구분 불가 → 명시값에만 의존
+function inferDeal(o) {
+    if (o && o.dealType && DEAL_LABEL[o.dealType]) return o.dealType;
+    const rent = (o && o.rent) || 0, dep = (o && o.deposit) || 0;
+    if (rent > 0) return 'monthly';
+    if (dep > 0) return 'jeonse';
+    return 'monthly';
+}
+// 거래유형 배지(작은 색상 칩)
+function dealBadge(o, sizePx) {
+    const d = inferDeal(o);
+    const fs = sizePx || 10.5;
+    return `<span class="deal-badge" style="--dc:${DEAL_COLOR[d]};font-size:${fs}px;">${DEAL_LABEL[d]}</span>`;
+}
+
 async function initMap() {
     if (!requireAuthOrRedirect()) return;
     const container = document.getElementById('map');
@@ -554,16 +577,18 @@ function formatEok(manwon) {
     return manwon.toLocaleString() + '만';        // 1억 미만 → 만원 그대로
 }
 
-// 마커/요약용 가격 라벨. 보증금/월세 형태("2.4억/50") 또는 단일 금액("16.3억").
+// 마커/요약용 가격 라벨. 거래유형에 따라 "매매 16억" / "전세 2.4억" / "월세 2.4억/50".
 // 관리비(manage)는 표시하지 않는다.
 function formatPriceLabel(b) {
+    const deal = inferDeal(b);
     const dep = b.deposit || 0;
     const rent = b.rent || 0;
     const depStr = formatEok(dep);
-    if (rent > 0) {                              // 월세 있음 → 보증금/월세
-        return depStr ? `${depStr}/${rent}` : `월 ${rent}`;
-    }
-    return depStr;                               // 매매·전세 등 단일 금액
+    if (deal === 'sale')   return depStr ? `매매 ${depStr}` : '';
+    if (deal === 'jeonse') return depStr ? `전세 ${depStr}` : '';
+    // monthly
+    if (rent > 0) return depStr ? `월세 ${depStr}/${rent}` : `월세 ${rent}`;
+    return depStr ? `전세 ${depStr}` : '';   // 월세인데 월세액이 0이면 사실상 전세로 표기
 }
 
 // =====================================================
@@ -740,6 +765,9 @@ function showClusterList(items) {
 
 function matchesFilter(b) {
     if (activeFilter === 'all') return true;
+    if (DEAL_CODES.includes(activeFilter)) {
+        return inferDeal(b) === activeFilter;
+    }
     if (['house', 'multiplex', 'officetel', 'commercial'].includes(activeFilter)) {
         return b.type === activeFilter;
     }
@@ -937,20 +965,27 @@ function closeSheet() {
 }
 
 function showBuildingList() {
-    document.getElementById('sheet-title').textContent = '내 건물 목록';
-    document.getElementById('sheet-subtitle').textContent = `총 ${state.buildings.length}개 건물 관리중`;
+    const list = state.buildings.filter(matchesFilter);
+    const dealName = DEAL_LABEL[activeFilter];
+    document.getElementById('sheet-title').textContent = dealName ? `${dealName} 매물` : '내 건물 목록';
+    document.getElementById('sheet-subtitle').textContent =
+        (activeFilter === 'all')
+            ? `총 ${state.buildings.length}개 건물 관리중`
+            : `${list.length}개 매물 (필터 적용중)`;
 
     const body = document.getElementById('sheet-body');
-    if (state.buildings.length === 0) {
+    if (list.length === 0) {
+        const msg = state.buildings.length === 0 ? '등록된 건물이 없습니다' : '조건에 맞는 매물이 없습니다';
+        const sub = state.buildings.length === 0 ? '+ 버튼을 눌러 첫 번째 건물을 추가해보세요' : '상단 필터를 바꿔보세요';
         body.innerHTML = `<div class="empty-state">
       <div class="empty-state-icon">${icon('building',56,'color:#9ca3af;')}</div>
-      <div class="empty-state-title">등록된 건물이 없습니다</div>
-      <div class="empty-state-sub">+ 버튼을 눌러 첫 번째 건물을 추가해보세요</div>
+      <div class="empty-state-title">${msg}</div>
+      <div class="empty-state-sub">${sub}</div>
     </div>`;
         return;
     }
 
-    body.innerHTML = state.buildings.map(buildingListItemHTML).join('');
+    body.innerHTML = list.map(buildingListItemHTML).join('');
     hydrateOwnerNames(body); // [B/E] edit by smsong - 목록 잠금 배지의 등록자 이름 채우기
 }
 
@@ -967,9 +1002,10 @@ function buildingListItemHTML(b) {
     return `<div class="building-list-item" onclick="selectBuilding('${b.id}')">
       ${thumb}
       <div style="flex:1;min-width:0;">
-        <div class="building-list-name">${b.name}</div>
+        <div class="building-list-name" style="display:flex;align-items:center;gap:6px;">${dealBadge(b)}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${b.name}</span></div>
         <div class="building-list-addr">${b.address}</div>
         <div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          ${formatPriceLabel(b) ? `<span style="font-size:11.5px;color:#1a56db;font-weight:800;letter-spacing:-0.2px;">${formatPriceLabel(b)}</span>` : ''}
           ${isMine(b)
         ? '<span style="font-size:10.5px;color:#1a56db;background:#e8f0fe;font-weight:700;padding:1px 7px;border-radius:10px;">내 매물</span>'
         : (ownerIdOf(b) ? `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10.5px;color:#6b7280;background:#f3f4f6;font-weight:600;padding:1px 7px;border-radius:10px;">${icon('lock', 11)} ${ownerNameSpan(b)}</span>` : '')}
@@ -1046,16 +1082,21 @@ function showBuildingDetail(b) {
       ${b.detailAddress ? `<span style="font-size:13px;color:#6b7280;">${b.detailAddress}</span>` : ''}
     </div>
 
-    <!-- 금액: 보증금 / 월세 / 관리비 -->
-    <div class="building-info-grid" style="grid-template-columns:repeat(3,1fr);">
+    <!-- 거래유형 + 금액 -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      ${dealBadge(b, 12)}
+      <span style="font-size:15px;font-weight:800;color:#1a56db;letter-spacing:-0.3px;">${formatPriceLabel(b) || '가격 미입력'}</span>
+    </div>
+    <div class="building-info-grid" style="grid-template-columns:repeat(${inferDeal(b) === 'monthly' ? 3 : 2},1fr);">
       <div class="info-card">
-        <div class="info-card-label">보증금</div>
+        <div class="info-card-label">${inferDeal(b) === 'sale' ? '매매가' : inferDeal(b) === 'jeonse' ? '전세금' : '보증금'}</div>
         <div class="info-card-value">${(b.deposit || 0).toLocaleString()}만원</div>
       </div>
+      ${inferDeal(b) === 'monthly' ? `
       <div class="info-card">
         <div class="info-card-label">월세</div>
         <div class="info-card-value">${(b.rent || 0).toLocaleString()}만원</div>
-      </div>
+      </div>` : ''}
       <div class="info-card">
         <div class="info-card-label">관리비</div>
         <div class="info-card-value">${(b.manage || 0).toLocaleString()}만원</div>
@@ -1108,16 +1149,26 @@ function renderUnitStatus(b) {
     }
 
     const rows = units.map(u => {
-        const rent = (u.status !== 'empty')
-            ? `<div class="uf-rent-main">${u.rent > 0 ? u.rent.toLocaleString() + '<i>만</i>' : '전세'}</div>
-               <div class="uf-rent-sub">보 ${(u.deposit || 0).toLocaleString()}</div>`
-            : `<div class="uf-rent-main uf-rent-empty">비어있음</div>`;
+        const deal = inferDeal(u);
+        let rent;
+        if (u.status === 'empty') {
+            rent = `<div class="uf-rent-main uf-rent-empty">비어있음</div>`;
+        } else if (deal === 'sale') {
+            rent = `<div class="uf-rent-main">${(u.deposit || 0).toLocaleString()}<i>만</i></div>
+                    <div class="uf-rent-sub">매매</div>`;
+        } else if (deal === 'jeonse') {
+            rent = `<div class="uf-rent-main">${(u.deposit || 0).toLocaleString()}<i>만</i></div>
+                    <div class="uf-rent-sub">전세</div>`;
+        } else {
+            rent = `<div class="uf-rent-main">${u.rent > 0 ? u.rent.toLocaleString() + '<i>만</i>' : '월세'}</div>
+                    <div class="uf-rent-sub">보 ${(u.deposit || 0).toLocaleString()}</div>`;
+        }
         return `
           <button type="button" class="uf-unit ${u.status}" onclick="openUnitDetail('${b.id}','${u.id}')">
             <span class="uf-rail"></span>
             <span class="uf-chip">${STATUS_LABEL[u.status]}</span>
             <span class="uf-unit-main">
-              <span class="uf-unit-name">${escapeHtml(u.name || '')}<i class="uf-floor">${u.floor}F</i></span>
+              <span class="uf-unit-name">${escapeHtml(u.name || '')}<i class="uf-floor">${u.floor}F</i><i class="uf-deal" style="--dc:${DEAL_COLOR[deal]};">${DEAL_LABEL[deal]}</i></span>
               <span class="uf-unit-sub">${u.area}㎡ · ${escapeHtml(u.tenant || '공실')}</span>
             </span>
             <span class="uf-rent">${rent}</span>
@@ -1395,11 +1446,19 @@ function openBuildingForm(building, lat, lng, addr) {
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">보증금 (만원)</label>
+      <label class="form-label">거래유형 *</label>
+      <div class="deal-selector" id="f-deal-selector">
+        <div class="deal-option" data-deal="sale" onclick="selectDeal('f','sale')">매매</div>
+        <div class="deal-option" data-deal="jeonse" onclick="selectDeal('f','jeonse')">전세</div>
+        <div class="deal-option" data-deal="monthly" onclick="selectDeal('f','monthly')">월세</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" id="f-deposit-label">보증금 (만원)</label>
       <input id="f-deposit" class="form-input" type="number" min="0" placeholder="예: 1000" value="${building ? (building.deposit || '') : ''}">
     </div>
     <div class="form-row">
-      <div class="form-group">
+      <div class="form-group" id="f-rent-group">
         <label class="form-label">월세 (만원)</label>
         <input id="f-rent" class="form-input" type="number" min="0" placeholder="예: 50" value="${building ? (building.rent || '') : ''}">
       </div>
@@ -1428,6 +1487,7 @@ function openBuildingForm(building, lat, lng, addr) {
 
     renderBfExisting();   // 수정 시 기존 이미지 썸네일 표시
     updateBfCount();
+    selectDeal('f', isEdit ? inferDeal(building) : 'monthly');   // 거래유형 초기 상태(라벨/월세칸)
     showModal();
 }
 
@@ -1442,13 +1502,15 @@ async function saveBuilding(id, lat, lng) {
     const name = document.getElementById('f-name').value.trim();
     if (!name) { showToast('건물명을 입력하세요'); return; }
 
+    const dealType = selectedDeal('f');
     const dto = {
         name,
         address: document.getElementById('f-addr').value.trim(),
         detailAddress: document.getElementById('f-detail').value.trim(),
         type: document.getElementById('f-type').value,
+        dealType,
         deposit: parseInt(document.getElementById('f-deposit').value) || 0,
-        rent: parseInt(document.getElementById('f-rent').value) || 0,
+        rent: dealType === 'monthly' ? (parseInt(document.getElementById('f-rent').value) || 0) : 0,
         manage: parseInt(document.getElementById('f-manage').value) || 0,
         lat: parseFloat(lat), lng: parseFloat(lng)
     };
@@ -1558,8 +1620,11 @@ function renderUnitTab(tab) {
 
     if (tab === 'info') {
         c.innerHTML = `
-      <div style="display:inline-block;padding:5px 12px;border-radius:20px;background:${statusBg[u.status]};color:${statusColors[u.status]};font-size:13px;font-weight:700;margin-bottom:12px;">
-        ${STATUS_LABEL[u.status]}
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <div style="display:inline-block;padding:5px 12px;border-radius:20px;background:${statusBg[u.status]};color:${statusColors[u.status]};font-size:13px;font-weight:700;">
+          ${STATUS_LABEL[u.status]}
+        </div>
+        ${dealBadge(u, 12)}
       </div>
       <div class="building-info-grid">
         <div class="info-card"><div class="info-card-label">호실</div><div class="info-card-value">${u.name}</div></div>
@@ -1645,14 +1710,22 @@ function openUnitForm(buildingId, unitId) {
       <label class="form-label">임차인명</label>
       <input id="uf-tenant" class="form-input" placeholder="임차인 이름" value="${u ? u.tenant : ''}">
     </div>
+    <div class="form-group">
+      <label class="form-label">거래유형</label>
+      <div class="deal-selector" id="uf-deal-selector">
+        <div class="deal-option" data-deal="sale" onclick="selectDeal('uf','sale')">매매</div>
+        <div class="deal-option" data-deal="jeonse" onclick="selectDeal('uf','jeonse')">전세</div>
+        <div class="deal-option" data-deal="monthly" onclick="selectDeal('uf','monthly')">월세</div>
+      </div>
+    </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">보증금 (만원)</label>
+        <label class="form-label" id="uf-deposit-label">보증금 (만원)</label>
         <input id="uf-deposit" class="form-input" type="number" placeholder="0" value="${u ? u.deposit : ''}">
       </div>
-      <div class="form-group">
+      <div class="form-group" id="uf-rent-group">
         <label class="form-label">월세 (만원)</label>
-        <input id="uf-rent" class="form-input" type="number" placeholder="0 = 전세" value="${u ? u.rent : ''}">
+        <input id="uf-rent" class="form-input" type="number" placeholder="0" value="${u ? u.rent : ''}">
       </div>
     </div>
     <div class="form-group">
@@ -1681,6 +1754,7 @@ function openUnitForm(buildingId, unitId) {
     <button class="btn-primary" onclick="saveUnit('${buildingId}','${isEdit ? unitId : ''}')">저장</button>
   `;
 
+    selectDeal('uf', isEdit ? inferDeal(u) : 'monthly');   // 거래유형 초기 상태
     showModal();
 }
 
@@ -1690,20 +1764,37 @@ function selectStatus(status) {
     });
 }
 
+// 거래유형 선택 — scope='f'(건물) 또는 'uf'(호실).
+//  · 선택 토글 + 보증금 라벨 변경(매매가/전세금/보증금) + 월세 입력칸 표시/숨김
+function selectDeal(scope, code) {
+    const sel = document.getElementById(scope + '-deal-selector');
+    if (sel) sel.querySelectorAll('.deal-option').forEach(o =>
+        o.classList.toggle('selected', o.dataset.deal === code));
+    const depLabel = document.getElementById(scope + '-deposit-label');
+    if (depLabel) depLabel.textContent =
+        code === 'sale' ? '매매가 (만원)' : code === 'jeonse' ? '전세금 (만원)' : '보증금 (만원)';
+    const rentGroup = document.getElementById(scope + '-rent-group');
+    if (rentGroup) rentGroup.style.display = (code === 'monthly') ? '' : 'none';
+}
+function selectedDeal(scope) {
+    return document.querySelector('#' + scope + '-deal-selector .deal-option.selected')?.dataset.deal || 'monthly';
+}
+
 async function saveUnit(buildingId, unitId) {
     if (_isSubmitting) return;                 // 진행 중이면 중복 호출 차단
     const name = document.getElementById('uf-name').value.trim();
     if (!name) { showToast('호실명을 입력하세요'); return; }
 
     const status = document.querySelector('.status-option.selected')?.dataset.status || 'empty';
+    const dealType = selectedDeal('uf');
     const dto = {
-        name, status,
+        name, status, dealType,
         floor: parseInt(document.getElementById('uf-floor').value) || 1,
         area: parseFloat(document.getElementById('uf-area').value) || 0,
         type: document.getElementById('uf-type').value,
         tenant: document.getElementById('uf-tenant').value.trim(),
         deposit: parseInt(document.getElementById('uf-deposit').value) || 0,
-        rent: parseInt(document.getElementById('uf-rent').value) || 0,
+        rent: dealType === 'monthly' ? (parseInt(document.getElementById('uf-rent').value) || 0) : 0,
         manage: parseInt(document.getElementById('uf-manage').value) || 0,
         contractStart: document.getElementById('uf-start').value,
         contractEnd: document.getElementById('uf-end').value,
@@ -2527,6 +2618,9 @@ document.addEventListener('click', e => {
             chip.classList.add('active');
             activeFilter = chip.dataset.filter;
             renderMarkers();
+            // 목록을 보고 있으면 분류 결과를 바로 반영 (지도 시트의 목록 peek 포함)
+            if (!currentBuilding) showBuildingList();
+            closeFilterPanel();
         });
     });
 

@@ -30,6 +30,12 @@ public class BuildingEntity {
     private int rent;               // 월세
     private int manage;             // 관리비
 
+    // 거래유형 (sale=매매 / jeonse=전세 / monthly=월세)
+    //  - sale  : deposit = 매매가, rent = 0
+    //  - jeonse: deposit = 전세금, rent = 0
+    //  - monthly: deposit = 보증금, rent = 월세
+    private String dealType;
+
     @Column(length = 1000)
     private String memo;            // 메모 (UI에서는 숨김, 데이터는 보존)
 

@@ -24,6 +24,9 @@ public interface BuildingRepository extends JpaRepository<BuildingEntity, Long> 
     List<BuildingEntity> findByDeletedAtIsNull();
     List<BuildingEntity> findByTypeAndDeletedAtIsNull(String type);
 
+    // 거래유형별 (sale/jeonse/monthly) — 정상 건물만
+    List<BuildingEntity> findByDealTypeAndDeletedAtIsNull(String dealType);
+
     // 특정 사용자의 휴지통 목록 (최근 삭제 순)
     List<BuildingEntity> findByOwner_UidAndDeletedAtIsNotNullOrderByDeletedAtDesc(String uid);
 
