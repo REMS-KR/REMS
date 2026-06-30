@@ -1483,9 +1483,11 @@ async function saveBuilding(id, lat, lng) {
 }
 
 async function deleteBuilding(id) {
+    if (_isSubmitting) return;
     const b = state.buildings.find(b => b.id === id);
     if (b && !isMine(b)) { showToast('본인이 등록한 매물만 삭제할 수 있습니다'); return; }
     if (!confirm('이 매물을 휴지통으로 이동할까요?\n휴지통에서 30일이 지나면 자동으로 영구 삭제됩니다.')) return;
+    showLoading('휴지통으로 이동하는 중…');
     try {
         await Api.deleteBuilding(id);
         await loadData();
@@ -1498,6 +1500,8 @@ async function deleteBuilding(id) {
         showToast('휴지통으로 이동되었습니다');
     } catch (e) {
         showToast('삭제 실패: ' + e.message);
+    } finally {
+        hideLoading();
     }
 }
 
@@ -1728,10 +1732,12 @@ async function saveUnit(buildingId, unitId) {
 }
 
 async function deleteUnit(buildingId, unitId) {
+    if (_isSubmitting) return;
     const b = state.buildings.find(b => b.id === buildingId);
     const u = b && b.units.find(u => u.id === unitId);
     if (u && !isMine(u)) { showToast('본인이 등록한 호실만 삭제할 수 있습니다'); return; }
     if (!confirm('이 호실을 삭제하시겠습니까?')) return;
+    showLoading('호실을 삭제하는 중…');
     try {
         await Api.deleteUnit(unitId);
         await loadData();
@@ -1743,6 +1749,8 @@ async function deleteUnit(buildingId, unitId) {
         showToast('호실이 삭제되었습니다');
     } catch (e) {
         showToast('삭제 실패: ' + e.message);
+    } finally {
+        hideLoading();
     }
 }
 
@@ -1881,6 +1889,7 @@ function openProfileEdit() {
 }
 
 async function saveProfileEdit() {
+    if (_isSubmitting) return;
     const me = getCurrentUser();
     if (!me || !me.uid) { showToast('로그인 정보를 찾을 수 없습니다'); return; }
     const v = id => (document.getElementById(id)?.value || '').trim();
@@ -1898,7 +1907,7 @@ async function saveProfileEdit() {
         agencyAddress: v('pe-agency-address')
     };
     try {
-        showToast('저장 중…');
+        showLoading('내 정보를 저장하는 중…');
         const updated = await Api.updateUser(dto);   // 파일 없이 JSON 부분 업데이트
         const merged = Object.assign({}, me, updated || dto);
         // 이 폼은 프로필 사진을 수정하지 않는다. 서버 응답에 profileURL/provider 가
@@ -1913,6 +1922,8 @@ async function saveProfileEdit() {
         showToast('내 정보가 저장되었습니다');
     } catch (err) {
         showToast('저장 실패: ' + err.message);
+    } finally {
+        hideLoading();
     }
 }
 // [E] edit by smsong
@@ -1922,10 +1933,11 @@ async function changeProfilePhoto(e) {
     const file = e.target.files && e.target.files[0];
     e.target.value = '';                 // 같은 파일 재선택 가능하게 초기화
     if (!file) return;
+    if (_isSubmitting) return;
     const me = getCurrentUser();
     if (!me || !me.uid) { showToast('로그인 정보를 찾을 수 없습니다'); return; }
+    showLoading('프로필 사진을 업로드하는 중…');
     try {
-        showToast('프로필 사진 업로드 중…');
         // name 은 함께 보내 기존 값 유지(부분 업데이트). 사진 외 다른 정보는 서버가 그대로 둠.
         const updated = await Api.updateUser({ uid: me.uid, id: me.id, name: me.name }, file);
         const merged = Object.assign({}, me, updated || {});   // 응답(UserDTO)의 새 profileURL 반영
@@ -1935,6 +1947,8 @@ async function changeProfilePhoto(e) {
         showToast('프로필 사진이 변경되었습니다');
     } catch (err) {
         showToast('변경 실패: ' + err.message);
+    } finally {
+        hideLoading();
     }
 }
 
@@ -1956,6 +1970,8 @@ function importData(e) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async ev => {
+        if (_isSubmitting) return;
+        showLoading('데이터를 가져오는 중…');
         try {
             const imported = JSON.parse(ev.target.result);
             if (!imported.buildings) { showToast('올바른 파일 형식이 아닙니다'); return; }
@@ -1979,12 +1995,15 @@ function importData(e) {
             showBuildingList();
             showToast('데이터를 가져왔습니다');
         } catch (err) { showToast('가져오기 실패: ' + err.message); }
+        finally { hideLoading(); }
     };
     reader.readAsText(file);
 }
 
 async function resetData() {
+    if (_isSubmitting) return;
     if (!confirm('서버의 모든 건물·호실 데이터가 삭제됩니다. 계속하시겠습니까?')) return;
+    showLoading('전체 데이터를 초기화하는 중…');
     try {
         for (const b of [...state.buildings]) {
             await Api.deleteBuilding(b.id);
@@ -1996,6 +2015,8 @@ async function resetData() {
         showToast('전체 데이터가 초기화되었습니다');
     } catch (e) {
         showToast('초기화 실패: ' + e.message);
+    } finally {
+        hideLoading();
     }
 }
 
@@ -2104,6 +2125,7 @@ function convertNaverArticle(raw) {
 }
 
 async function importNaverJson() {
+    if (_isSubmitting) return;
     const txt = document.getElementById('naver-json').value.trim();
     if (!txt) { showToast('JSON을 붙여넣으세요'); return; }
 
@@ -2116,6 +2138,7 @@ async function importNaverJson() {
 
     const c = convertNaverArticle(raw);
 
+    showLoading('네이버 매물을 가져오는 중…');
     try {
         // 같은 건물명이 있으면 그 건물에 호실 추가, 없으면 새 건물 생성
         const existing = state.buildings.find(x => x.name === c.buildingName);
@@ -2144,6 +2167,8 @@ async function importNaverJson() {
         selectBuilding(buildingId);
     } catch (e) {
         showToast('가져오기 실패: ' + e.message);
+    } finally {
+        hideLoading();
     }
 }
 
@@ -2661,6 +2686,8 @@ function renderTrashList(items) {
 }
 
 async function restoreFromTrash(id) {
+    if (_isSubmitting) return;
+    showLoading('매물을 복원하는 중…');
     try {
         await Api.restoreBuilding(id);
         await loadData();
@@ -2672,11 +2699,15 @@ async function restoreFromTrash(id) {
         showToast('매물을 복원했습니다');
     } catch (e) {
         showToast('복원 실패: ' + e.message);
+    } finally {
+        hideLoading();
     }
 }
 
 async function purgeFromTrash(id) {
+    if (_isSubmitting) return;
     if (!confirm('이 매물을 완전히 삭제할까요?\n영구 삭제되며 복구할 수 없습니다.')) return;
+    showLoading('영구 삭제하는 중…');
     try {
         await Api.permanentlyDeleteBuilding(id);
         const items = await Api.getTrash();
@@ -2684,5 +2715,7 @@ async function purgeFromTrash(id) {
         showToast('영구 삭제되었습니다');
     } catch (e) {
         showToast('삭제 실패: ' + e.message);
+    } finally {
+        hideLoading();
     }
 }
