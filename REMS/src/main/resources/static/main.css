@@ -635,20 +635,26 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 .map-float-controls, #add-btn-float { transition: opacity 0.3s ease, transform 0.25s, bottom 0.4s cubic-bezier(0.4,0,0.2,1); }
 
 /* 위치 설정(피커) 오버레이가 떠 있는 상단바보다 위에 오도록 */
-#map-picker-bar { z-index: 300; }
-#map-picker-search { z-index: 301; }
-#map-picker-confirm { z-index: 410; }
+#map-picker-bar { z-index: 300; transition: opacity 0.25s ease, transform 0.25s ease; }
+#map-picker-search { z-index: 301; transition: opacity 0.25s ease, transform 0.25s ease; }
+#map-picker-confirm { z-index: 410; transition: bottom 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease; }
 
-/* 매물 생성(위치 설정) 중: 상단바(로고/검색/필터/로그아웃)를 숨기고
-   그 자리에 주소 검색창을 띄움. 안내바는 검색창 바로 아래로 */
+/* 매물 생성(위치 설정) 중: 상단바를 숨기고, 안내 헤더를 위에·검색창을 그 아래에 배치 */
 #app.picker-active #topbar { opacity: 0; pointer-events: none; transform: translateY(-8px); }
-#app.picker-active #map-picker-search {
-    top: calc(env(safe-area-inset-top, 0px) + 8px); left: 12px; right: 12px;
-}
 #app.picker-active #map-picker-bar {
-    top: calc(env(safe-area-inset-top, 0px) + 60px);
+    top: calc(env(safe-area-inset-top, 0px) + 8px); left: 12px; right: 12px;
+    border-radius: var(--radius-md);
     background: rgba(26,86,219,0.95);
 }
+#app.picker-active #map-picker-search {
+    top: calc(env(safe-area-inset-top, 0px) + 56px); left: 12px; right: 12px;
+}
+/* 위치 설정 중 화면 탭(몰입): 안내·검색·하단 메뉴 숨기고 확인/취소·플로팅 버튼을 내림 */
+#app.picker-active.chrome-hidden #map-picker-bar,
+#app.picker-active.chrome-hidden #map-picker-search {
+    opacity: 0; pointer-events: none; transform: translateY(-14px);
+}
+#app.chrome-hidden #map-picker-confirm { bottom: max(26px, env(safe-area-inset-bottom)); }
 
 /* 2) 몰입 모드 — 지도 클릭 시 상단은 위로, 하단은 아래로 슬라이드 아웃 */
 #app.chrome-hidden #topbar { transform: translateY(-130%); }
@@ -997,21 +1003,28 @@ html.mode-web #modal {
 .uf-unit {
     position: relative; width: 100%;
     display: flex; align-items: center; gap: 11px;
-    padding: 12px 12px 12px 16px;
-    border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+    padding: 12px 12px 12px 18px;
+    border: 1.5px solid var(--gray-200); border-radius: var(--radius-md);
     background: var(--white); cursor: pointer; text-align: left;
     font-family: var(--font); overflow: hidden;
-    transition: border-color 0.15s, box-shadow 0.15s, transform 0.08s;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.08s, background 0.15s;
 }
-.uf-unit:active { transform: scale(0.992); background: var(--gray-50); }
-.uf-unit:hover { box-shadow: var(--shadow-sm); }
+.uf-unit:active { transform: scale(0.992); }
+.uf-unit:hover { box-shadow: var(--shadow-md); }
+
+/* 상태별 테두리 색 + 옅은 좌→우 틴트 (현재 톤에 맞춘 세련된 강조) */
+.uf-unit.occupied { border-color: rgba(13,148,81,0.40);  background: linear-gradient(90deg, rgba(13,148,81,0.06), transparent 46%); }
+.uf-unit.expiring { border-color: rgba(217,119,6,0.45);   background: linear-gradient(90deg, rgba(217,119,6,0.07), transparent 46%); }
+.uf-unit.empty    { border-color: rgba(220,38,38,0.40);   background: linear-gradient(90deg, rgba(220,38,38,0.06), transparent 46%); }
+.uf-unit.occupied:hover { border-color: var(--green); }
+.uf-unit.expiring:hover { border-color: var(--amber); }
+.uf-unit.empty:hover    { border-color: var(--red); }
 
 /* 왼쪽 상태 레일 (세로 색띠) */
-.uf-rail { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; }
+.uf-rail { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; border-radius: var(--radius-md) 0 0 var(--radius-md); }
 .uf-unit.occupied .uf-rail { background: var(--green); }
 .uf-unit.expiring .uf-rail { background: var(--amber); }
 .uf-unit.empty    .uf-rail { background: var(--red); }
-.uf-unit.empty { background: linear-gradient(90deg, rgba(220,38,38,0.04), transparent 40%); }
 
 /* 상태 칩 */
 .uf-chip {

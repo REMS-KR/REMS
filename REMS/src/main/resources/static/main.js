@@ -240,7 +240,7 @@ function icon(name, size, extraStyle) {
         + `style="vertical-align:middle;flex-shrink:0;${extraStyle || ''}" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
 }
 // 건물 유형 → 라인 아이콘 (기본 이모지 대체)
-const TYPE_ICON_NAME = { house: 'house', multiplex: 'multiplex', officetel: 'officetel', commercial: 'commercial' };
+const TYPE_ICON_NAME = { house: 'house', multiplex: 'multiplex', officetel: 'officetel', apartment: 'officetel', neighborhood: 'commercial', commercial: 'commercial' };
 function typeIcon(type, size, color) {
     return `<span style="display:inline-flex;align-items:center;color:${color || '#1a56db'};">`
         + icon(TYPE_ICON_NAME[type] || 'building', size || 22) + `</span>`;
@@ -373,8 +373,8 @@ let activeTab = 'map';
 
 const STATUS_COLOR = { empty: '#dc2626', occupied: '#0d9451', expiring: '#d97706' };
 const STATUS_LABEL = { empty: '공실', occupied: '임차', expiring: '만기임박' };
-const TYPE_EMOJI = { house: '🏠', multiplex: '🏘️', officetel: '🏢', commercial: '🏪' };
-const TYPE_LABEL = { house: '단독&다중', multiplex: '다세대', officetel: '오피스텔', commercial: '상가' };
+const TYPE_EMOJI = { house: '🏠', multiplex: '🏘️', officetel: '🏢', apartment: '🏬', neighborhood: '🏪', commercial: '🛍️' };
+const TYPE_LABEL = { house: '단독&다중', multiplex: '다세대', officetel: '오피스텔', apartment: '아파트', neighborhood: '근린생활시설', commercial: '상가' };
 
 // 거래유형 (sale=매매 / jeonse=전세 / monthly=월세)
 const DEAL_LABEL = { sale: '매매', jeonse: '전세', monthly: '월세' };
@@ -399,6 +399,32 @@ function dealBadge(o, sizePx) {
     return `<span class="deal-badge" style="--dc:${DEAL_COLOR[d]};font-size:${fs}px;">${DEAL_LABEL[d]}</span>`;
 }
 
+// 계약 만료일이 지나면(만기일 당일 포함) 자동으로 '공실'로 간주.
+//  · 저장값을 바꾸지 않고 "표시상" 자동 전환 → 새로고침/cron 없이 항상 최신.
+function effectiveStatus(u) {
+    if (!u) return 'empty';
+    if (u.status !== 'empty' && u.contractEnd) {
+        const end = new Date(u.contractEnd);
+        if (!isNaN(end)) {
+            const today = new Date();
+            const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const e0 = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+            if (e0 <= t0) return 'empty';   // 만기일이 되면(=오늘 이상이면) 공실
+        }
+    }
+    return u.status || 'empty';
+}
+
+// 역지오코딩 결과로 "풀주소(지번 포함)"를 만든다.
+//  예) "서울특별시 강남구 테헤란로 142 (역삼동 681-1)"
+function buildFullAddress(a) {
+    if (!a) return '';
+    const road = (a.roadAddress || '').trim();
+    const jibun = (a.jibunAddress || '').trim();
+    if (road && jibun && road !== jibun) return `${road} (${jibun})`;
+    return road || jibun || '';
+}
+
 async function initMap() {
     if (!requireAuthOrRedirect()) return;
     const container = document.getElementById('map');
@@ -416,6 +442,7 @@ async function initMap() {
     naver.maps.Event.addListener(map, 'click', function(e) {
         if (pickerMode) {
             pickerLatlng = e.coord; // 네이버는 e.coord에 좌표가 담깁니다.
+            togglePickerImmersive(); // 위치 설정 중에도 탭하면 상단(검색/안내)·하단 메뉴가 숨고 버튼이 내려감
             return;
         }
         // 시트가 펼쳐져 있으면 peek로 내리고, 아니면(어느 탭이든) 상/하단 메뉴 토글(몰입 모드)
@@ -591,6 +618,13 @@ function formatPriceLabel(b) {
     return depStr ? `전세 ${depStr}` : '';   // 월세인데 월세액이 0이면 사실상 전세로 표기
 }
 
+// 매물(건물) 마커 2번째 줄 — 매물엔 가격이 없으므로 호실 요약을 표시
+function buildingMarkerSub(b) {
+    const s = getUnitStats(b);
+    if (s.total === 0) return '';
+    return s.empty > 0 ? `호실 ${s.total} · 공실 ${s.empty}` : `호실 ${s.total}`;
+}
+
 // =====================================================
 // MARKER + CLUSTERING
 //  · 화면 픽셀 거리(CLUSTER_PX) 기준으로 가까운 매물을 한 개의 동그라미(숫자) 마커로 묶는다.
@@ -606,7 +640,7 @@ function addBuildingMarker(b) {
     const unitStats = getUnitStats(b);
     const dominant = unitStats.empty > 0 ? 'empty' : (unitStats.expiring > 0 ? 'expiring' : 'occupied');
     const color = STATUS_COLOR[dominant];
-    const priceLabel = formatPriceLabel(b);   // 보증금/월세 또는 단일 금액 (관리비 제외)
+    const subLabel = buildingMarkerSub(b);   // 호실 N · 공실 M (매물엔 가격 없음)
 
     const content = `
       <div onclick="selectBuilding('${b.id}')" style="
@@ -621,7 +655,7 @@ function addBuildingMarker(b) {
       ">
         <div style="font-size:10.5px;font-weight:700;color:#111;line-height:1.25;
           white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(b.name)}</div>
-        ${priceLabel ? `<div style="font-size:11px;color:#1a56db;font-weight:800;margin-top:1px;letter-spacing:-0.2px;line-height:1.25;white-space:nowrap;">${escapeHtml(priceLabel)}</div>` : ''}
+        ${subLabel ? `<div style="font-size:10.5px;color:${color};font-weight:700;margin-top:1px;letter-spacing:-0.2px;line-height:1.25;white-space:nowrap;">${escapeHtml(subLabel)}</div>` : ''}
         <div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);
           width:0;height:0;border-left:6px solid transparent;
           border-right:6px solid transparent;border-top:6px solid ${color};">
@@ -765,10 +799,11 @@ function showClusterList(items) {
 
 function matchesFilter(b) {
     if (activeFilter === 'all') return true;
+    // 거래유형 필터: 해당 거래유형의 호실을 1개 이상 가진 매물
     if (DEAL_CODES.includes(activeFilter)) {
-        return inferDeal(b) === activeFilter;
+        return (b.units || []).some(u => inferDeal(u) === activeFilter);
     }
-    if (['house', 'multiplex', 'officetel', 'commercial'].includes(activeFilter)) {
+    if (['house', 'multiplex', 'officetel', 'apartment', 'neighborhood', 'commercial'].includes(activeFilter)) {
         return b.type === activeFilter;
     }
     const s = getUnitStats(b);
@@ -780,10 +815,11 @@ function matchesFilter(b) {
 
 function getUnitStats(b) {
     const units = b.units || [];
+    const eff = units.map(effectiveStatus);   // 만기일 지난 호실은 자동 공실 처리
     return {
-        empty: units.filter(u => u.status === 'empty').length,
-        occupied: units.filter(u => u.status === 'occupied').length,
-        expiring: units.filter(u => u.status === 'expiring').length,
+        empty: eff.filter(s => s === 'empty').length,
+        occupied: eff.filter(s => s === 'occupied').length,
+        expiring: eff.filter(s => s === 'expiring').length,
         total: units.length
     };
 }
@@ -1002,10 +1038,10 @@ function buildingListItemHTML(b) {
     return `<div class="building-list-item" onclick="selectBuilding('${b.id}')">
       ${thumb}
       <div style="flex:1;min-width:0;">
-        <div class="building-list-name" style="display:flex;align-items:center;gap:6px;">${dealBadge(b)}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${b.name}</span></div>
+        <div class="building-list-name" style="display:flex;align-items:center;gap:6px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${b.name}</span></div>
         <div class="building-list-addr">${b.address}</div>
         <div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-          ${formatPriceLabel(b) ? `<span style="font-size:11.5px;color:#1a56db;font-weight:800;letter-spacing:-0.2px;">${formatPriceLabel(b)}</span>` : ''}
+          <span style="font-size:11px;color:#6b7280;font-weight:700;">${TYPE_LABEL[b.type] || ''}</span>
           ${isMine(b)
         ? '<span style="font-size:10.5px;color:#1a56db;background:#e8f0fe;font-weight:700;padding:1px 7px;border-radius:10px;">내 매물</span>'
         : (ownerIdOf(b) ? `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10.5px;color:#6b7280;background:#f3f4f6;font-weight:600;padding:1px 7px;border-radius:10px;">${icon('lock', 11)} ${ownerNameSpan(b)}</span>` : '')}
@@ -1049,7 +1085,7 @@ function showBuildingDetail(b) {
     const totalDeposit = b.units.filter(u => u.status !== 'empty').reduce((sum, u) => sum + (u.deposit || 0), 0);
 
     document.getElementById('sheet-title').textContent = b.name;
-    document.getElementById('sheet-subtitle').textContent = (b.address || '') + (b.detailAddress ? ' ' + b.detailAddress : '');
+    document.getElementById('sheet-subtitle').textContent = (b.address || '');
 
     const body = document.getElementById('sheet-body');
     body.innerHTML = `
@@ -1075,32 +1111,11 @@ function showBuildingDetail(b) {
       <button onclick="switchTab('list')" style="display:inline-flex;align-items:center;gap:4px;padding:7px 14px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:600;color:#6b7280;cursor:pointer;">${icon('back',15)} 목록</button>
     </div>
 
-    <!-- 주소 + 상세주소 (바로 옆에) -->
+    <!-- 주소(풀주소·지번 포함) + 건물 유형 -->
     <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:10px 12px;background:#f9fafb;border-radius:10px;">
       <span style="font-size:12px;font-weight:700;color:#6b7280;flex-shrink:0;">주소</span>
       <span style="font-size:14px;font-weight:600;color:#111827;">${b.address || '-'}</span>
-      ${b.detailAddress ? `<span style="font-size:13px;color:#6b7280;">${b.detailAddress}</span>` : ''}
-    </div>
-
-    <!-- 거래유형 + 금액 -->
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-      ${dealBadge(b, 12)}
-      <span style="font-size:15px;font-weight:800;color:#1a56db;letter-spacing:-0.3px;">${formatPriceLabel(b) || '가격 미입력'}</span>
-    </div>
-    <div class="building-info-grid" style="grid-template-columns:repeat(${inferDeal(b) === 'monthly' ? 3 : 2},1fr);">
-      <div class="info-card">
-        <div class="info-card-label">${inferDeal(b) === 'sale' ? '매매가' : inferDeal(b) === 'jeonse' ? '전세금' : '보증금'}</div>
-        <div class="info-card-value">${(b.deposit || 0).toLocaleString()}만원</div>
-      </div>
-      ${inferDeal(b) === 'monthly' ? `
-      <div class="info-card">
-        <div class="info-card-label">월세</div>
-        <div class="info-card-value">${(b.rent || 0).toLocaleString()}만원</div>
-      </div>` : ''}
-      <div class="info-card">
-        <div class="info-card-label">관리비</div>
-        <div class="info-card-value">${(b.manage || 0).toLocaleString()}만원</div>
-      </div>
+      <span style="margin-left:auto;font-size:11px;font-weight:700;color:#1a56db;background:#e8f0fe;padding:2px 8px;border-radius:10px;flex-shrink:0;">${TYPE_LABEL[b.type] || ''}</span>
     </div>
 
     ${renderUnitStatus(b)}
@@ -1150,8 +1165,9 @@ function renderUnitStatus(b) {
 
     const rows = units.map(u => {
         const deal = inferDeal(u);
+        const st = effectiveStatus(u);   // 만기일 지나면 자동 공실
         let rent;
-        if (u.status === 'empty') {
+        if (st === 'empty') {
             rent = `<div class="uf-rent-main uf-rent-empty">비어있음</div>`;
         } else if (deal === 'sale') {
             rent = `<div class="uf-rent-main">${(u.deposit || 0).toLocaleString()}<i>만</i></div>
@@ -1164,12 +1180,12 @@ function renderUnitStatus(b) {
                     <div class="uf-rent-sub">보 ${(u.deposit || 0).toLocaleString()}</div>`;
         }
         return `
-          <button type="button" class="uf-unit ${u.status}" onclick="openUnitDetail('${b.id}','${u.id}')">
+          <button type="button" class="uf-unit ${st}" onclick="openUnitDetail('${b.id}','${u.id}')">
             <span class="uf-rail"></span>
-            <span class="uf-chip">${STATUS_LABEL[u.status]}</span>
+            <span class="uf-chip">${STATUS_LABEL[st]}</span>
             <span class="uf-unit-main">
-              <span class="uf-unit-name">${escapeHtml(u.name || '')}<i class="uf-floor">${u.floor}F</i><i class="uf-deal" style="--dc:${DEAL_COLOR[deal]};">${DEAL_LABEL[deal]}</i></span>
-              <span class="uf-unit-sub">${u.area}㎡ · ${escapeHtml(u.tenant || '공실')}</span>
+              <span class="uf-unit-name">${escapeHtml(u.name || '')}<i class="uf-deal" style="--dc:${DEAL_COLOR[deal]};">${DEAL_LABEL[deal]}</i></span>
+              <span class="uf-unit-sub">${u.area}㎡</span>
             </span>
             <span class="uf-rent">${rent}</span>
             <span class="uf-go">${icon('back', 15, 'transform:rotate(180deg);color:var(--gray-300);')}</span>
@@ -1246,6 +1262,7 @@ function startAddBuilding() {
     addBtn.classList.add('picking');      // + → × (취소 아이콘)
     addBtn.title = '위치 설정 취소';
     document.getElementById('app').classList.add('picker-active'); // 상단바 숨기고 검색창을 그 자리에
+    document.getElementById('app').classList.remove('chrome-hidden'); // 항상 검색/안내바 보이는 상태로 시작
     Sheet.hardClose();                    // 위치 설정 중엔 시트를 완전히 내려 지도를 비움
     document.getElementById('sheet-body').innerHTML = `<div class="empty-state"><div class="empty-state-icon">${icon('pin',56,'color:#9ca3af;')}</div><div class="empty-state-title">지도를 이동하여 위치 설정</div><div class="empty-state-sub">건물 위치를 지도 위에서 직접 설정하세요</div></div>`;
 }
@@ -1268,6 +1285,7 @@ function cancelMapPicker() {
     addBtn.classList.remove('picking');
     addBtn.title = '건물 추가';
     document.getElementById('app').classList.remove('picker-active'); // 상단바 복원
+    document.getElementById('app').classList.remove('chrome-hidden');
     showBuildingList();
     Sheet.collapse();                     // 취소하면 목록을 다시 살짝 띄움(peek)
 }
@@ -1285,6 +1303,7 @@ function confirmPickerLocation() {
     addBtn.classList.remove('picking');
     addBtn.title = '건물 추가';
     document.getElementById('app').classList.remove('picker-active'); // 상단바 복원
+    document.getElementById('app').classList.remove('chrome-hidden');
 
     // 네이버 Reverse Geocoding 호출
     naver.maps.Service.reverseGeocode({
@@ -1292,9 +1311,8 @@ function confirmPickerLocation() {
     }, function(status, response) {
         let addr = '';
         if (status === naver.maps.Service.Status.OK) {
-            const items = response.v2.address;
-            // 지번 주소 또는 도로명 주소를 가져옵니다.
-            addr = items.roadAddress || items.jibunAddress || '';
+            // 풀주소(도로명 + 지번)로 저장 — 예: "서울특별시 강남구 테헤란로 142 (역삼동 681-1)"
+            addr = buildFullAddress(response.v2.address);
         }
         // 좌표를 전달할 때 네이버는 .lat() .lng() 함수를 사용합니다.
         openBuildingForm(null, center.lat(), center.lng(), addr);
@@ -1433,39 +1451,15 @@ function openBuildingForm(building, lat, lng, addr) {
       <input id="f-addr" class="form-input" type="text" placeholder="주소" value="${building ? (building.address || '') : (addr || '')}">
     </div>
     <div class="form-group">
-      <label class="form-label">상세주소</label>
-      <input id="f-detail" class="form-input" type="text" placeholder="예: 3층 302호, 동/호수 등" value="${building ? (building.detailAddress || '') : ''}">
-    </div>
-    <div class="form-group">
       <label class="form-label">건물 유형</label>
       <select id="f-type" class="form-select">
         <option value="house" ${(!building || building.type==='house')?'selected':''}>단독&다중</option>
         <option value="multiplex" ${building && building.type==='multiplex'?'selected':''}>다세대</option>
         <option value="officetel" ${building && building.type==='officetel'?'selected':''}>오피스텔</option>
+        <option value="apartment" ${building && building.type==='apartment'?'selected':''}>아파트</option>
+        <option value="neighborhood" ${building && building.type==='neighborhood'?'selected':''}>근린생활시설</option>
         <option value="commercial" ${building && building.type==='commercial'?'selected':''}>상가</option>
       </select>
-    </div>
-    <div class="form-group">
-      <label class="form-label">거래유형 *</label>
-      <div class="deal-selector" id="f-deal-selector">
-        <div class="deal-option" data-deal="sale" onclick="selectDeal('f','sale')">매매</div>
-        <div class="deal-option" data-deal="jeonse" onclick="selectDeal('f','jeonse')">전세</div>
-        <div class="deal-option" data-deal="monthly" onclick="selectDeal('f','monthly')">월세</div>
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label" id="f-deposit-label">보증금 (만원)</label>
-      <input id="f-deposit" class="form-input" type="number" min="0" placeholder="예: 1000" value="${building ? (building.deposit || '') : ''}">
-    </div>
-    <div class="form-row">
-      <div class="form-group" id="f-rent-group">
-        <label class="form-label">월세 (만원)</label>
-        <input id="f-rent" class="form-input" type="number" min="0" placeholder="예: 50" value="${building ? (building.rent || '') : ''}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">관리비 (만원)</label>
-        <input id="f-manage" class="form-input" type="number" min="0" placeholder="예: 5" value="${building ? (building.manage || '') : ''}">
-      </div>
     </div>
     ${isEdit ? `
     <div class="form-group">
@@ -1477,6 +1471,7 @@ function openBuildingForm(building, lat, lng, addr) {
       <input id="f-media" class="form-input" type="file" accept="image/*,video/*" multiple onchange="addBfFiles(event)">
       <div id="bf-new-preview" class="bf-thumb-wrap"></div>
     </div>
+    <div style="font-size:12px;color:#9ca3af;margin-top:6px;">거래유형·보증금·월세 등 금액 정보는 <b>호실(호실 추가)</b>에서 입력합니다.</div>
   `;
 
     document.getElementById('modal-footer').innerHTML = `
@@ -1487,7 +1482,6 @@ function openBuildingForm(building, lat, lng, addr) {
 
     renderBfExisting();   // 수정 시 기존 이미지 썸네일 표시
     updateBfCount();
-    selectDeal('f', isEdit ? inferDeal(building) : 'monthly');   // 거래유형 초기 상태(라벨/월세칸)
     showModal();
 }
 
@@ -1502,16 +1496,10 @@ async function saveBuilding(id, lat, lng) {
     const name = document.getElementById('f-name').value.trim();
     if (!name) { showToast('건물명을 입력하세요'); return; }
 
-    const dealType = selectedDeal('f');
     const dto = {
         name,
         address: document.getElementById('f-addr').value.trim(),
-        detailAddress: document.getElementById('f-detail').value.trim(),
         type: document.getElementById('f-type').value,
-        dealType,
-        deposit: parseInt(document.getElementById('f-deposit').value) || 0,
-        rent: dealType === 'monthly' ? (parseInt(document.getElementById('f-rent').value) || 0) : 0,
-        manage: parseInt(document.getElementById('f-manage').value) || 0,
         lat: parseFloat(lat), lng: parseFloat(lng)
     };
 
@@ -1621,27 +1609,24 @@ function renderUnitTab(tab) {
     if (tab === 'info') {
         c.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-        <div style="display:inline-block;padding:5px 12px;border-radius:20px;background:${statusBg[u.status]};color:${statusColors[u.status]};font-size:13px;font-weight:700;">
-          ${STATUS_LABEL[u.status]}
+        <div style="display:inline-block;padding:5px 12px;border-radius:20px;background:${statusBg[effectiveStatus(u)]};color:${statusColors[effectiveStatus(u)]};font-size:13px;font-weight:700;">
+          ${STATUS_LABEL[effectiveStatus(u)]}
         </div>
         ${dealBadge(u, 12)}
       </div>
       <div class="building-info-grid">
         <div class="info-card"><div class="info-card-label">호실</div><div class="info-card-value">${u.name}</div></div>
-        <div class="info-card"><div class="info-card-label">층</div><div class="info-card-value">${u.floor}층</div></div>
         <div class="info-card"><div class="info-card-label">면적</div><div class="info-card-value">${u.area}㎡</div></div>
         <div class="info-card"><div class="info-card-label">유형</div><div class="info-card-value">${{commercial:'상가',residential:'주거',office:'사무실'}[u.type]||u.type}</div></div>
-      </div>
-      <div class="info-card" style="margin-top:8px;">
-        <div class="info-card-label">임차인</div>
-        <div class="info-card-value">${u.tenant || '—'}</div>
+        <div class="info-card"><div class="info-card-label">거래</div><div class="info-card-value">${DEAL_LABEL[inferDeal(u)]}</div></div>
       </div>
     `;
     } else if (tab === 'contract') {
+        const d = inferDeal(u);
         c.innerHTML = `
       <div class="building-info-grid">
-        <div class="info-card"><div class="info-card-label">보증금</div><div class="info-card-value">${u.deposit ? u.deposit.toLocaleString()+'만원' : '—'}</div></div>
-        <div class="info-card"><div class="info-card-label">월세</div><div class="info-card-value">${u.rent ? u.rent.toLocaleString()+'만원' : (u.deposit ? '전세' : '—')}</div></div>
+        <div class="info-card"><div class="info-card-label">${d === 'sale' ? '매매가' : d === 'jeonse' ? '전세금' : '보증금'}</div><div class="info-card-value">${u.deposit ? u.deposit.toLocaleString()+'만원' : '—'}</div></div>
+        ${d === 'monthly' ? `<div class="info-card"><div class="info-card-label">월세</div><div class="info-card-value">${u.rent ? u.rent.toLocaleString()+'만원' : '—'}</div></div>` : ''}
         <div class="info-card"><div class="info-card-label">관리비</div><div class="info-card-value">${u.manage ? u.manage+'만원' : '—'}</div></div>
         <div class="info-card"><div class="info-card-label">계약기간</div>
           <div class="info-card-value" style="font-size:12px;">${u.contractStart ? u.contractStart+'~'+u.contractEnd : '—'}</div>
@@ -1672,15 +1657,10 @@ function openUnitForm(buildingId, unitId) {
     document.getElementById('modal-title').textContent = isEdit ? '호실 수정' : '호실 추가';
     document.getElementById('modal-body').innerHTML = `
     <div class="form-section-title">기본 정보</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">호실명 *</label>
-        <input id="uf-name" class="form-input" placeholder="예: 101호" value="${u ? u.name : ''}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">층</label>
-        <input id="uf-floor" class="form-input" type="number" min="1" placeholder="층" value="${u ? u.floor : ''}">
-      </div>
+    <div class="form-group">
+      <label class="form-label">호실명 *</label>
+      <input id="uf-name" class="form-input" placeholder="예: 101호" value="${u ? u.name : ''}">
+      <input id="uf-floor" type="hidden" value="${u ? u.floor : 1}">
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -1705,11 +1685,8 @@ function openUnitForm(buildingId, unitId) {
       </div>
     </div>
 
-    <div class="form-section-title">임차인 정보</div>
-    <div class="form-group">
-      <label class="form-label">임차인명</label>
-      <input id="uf-tenant" class="form-input" placeholder="임차인 이름" value="${u ? u.tenant : ''}">
-    </div>
+    <div class="form-section-title">거래 · 금액 정보</div>
+    <input id="uf-tenant" type="hidden" value="${u ? (u.tenant || '') : ''}">
     <div class="form-group">
       <label class="form-label">거래유형</label>
       <div class="deal-selector" id="uf-deal-selector">
@@ -2300,6 +2277,14 @@ function setImmersive(on) {
 function toggleImmersive() {
     const app = document.getElementById('app');
     setImmersive(!(app && app.classList.contains('chrome-hidden')));
+}
+
+// 위치 설정(피커) 중 화면 탭 → 상단(검색/안내바)·하단 메뉴를 숨기고 버튼을 내림(다시 탭하면 복귀)
+function togglePickerImmersive() {
+    const app = document.getElementById('app');
+    if (!app) return;
+    app.classList.toggle('chrome-hidden');
+    closeFilterPanel();
 }
 
 // ===== 필터 패널 — 상단 필터 버튼에서 쑥 나오고 다시 누르면 쑥 들어감 =====
