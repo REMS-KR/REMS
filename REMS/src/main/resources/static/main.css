@@ -147,6 +147,10 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font); backgroun
 #bottom-sheet.half { transform: translateY(20%); }
 #bottom-sheet.full { transform: translateY(0); }
 
+/* 탭(목록/설정/임차인 관리) 모드에서는 내용이 짧아도 시트를 화면 높이만큼 고정 →
+   내용이 적어도 다른 메뉴처럼 끝까지(full) 올라오게. (웹 모드는 제외) */
+html:not(.mode-web) #bottom-sheet[data-mode="tab"] { height: 88vh; height: 88dvh; }
+
 /* 화면 정중앙 카드 표시 */
 #bottom-sheet.center {
     top: 50%; bottom: auto; left: 50%;

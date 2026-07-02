@@ -563,7 +563,7 @@ async function initMap() {
     // 현재 위치 추적 시작(파란 점). iOS가 아니면 나침반도 바로 연결
     startGeolocationTracking();
     if (!(typeof DeviceOrientationEvent !== 'undefined' &&
-          typeof DeviceOrientationEvent.requestPermission === 'function')) {
+        typeof DeviceOrientationEvent.requestPermission === 'function')) {
         ensureOrientationPermission();
     }
 
@@ -589,13 +589,13 @@ function gotoMyLocation() {
 function centerOnCurrentLocationOnce() {
     if (!navigator.geolocation || !map) return;
     navigator.geolocation.getCurrentPosition(pos => {
-        if (_suppressAutoCenter) return;     // 그 사이 사용자가 지도를 조작했으면 중단
-        const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
-        updateGeoMarker(latlng, pos.coords.heading);
-        map.setCenter(latlng);
-        map.setZoom(16);
-    }, () => { /* 거부/실패 → 기본 서울 중심 유지 */ },
-       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+            if (_suppressAutoCenter) return;     // 그 사이 사용자가 지도를 조작했으면 중단
+            const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+            updateGeoMarker(latlng, pos.coords.heading);
+            map.setCenter(latlng);
+            map.setZoom(16);
+        }, () => { /* 거부/실패 → 기본 서울 중심 유지 */ },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
 }
 
 // =====================================================
@@ -1383,7 +1383,7 @@ function agencySectionHTML(p) {
       <div class="oa-row">
         <span class="oa-row-ic">${icon(ic, 15)}</span>
         ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g, ''))}" class="oa-tel">${escapeHtml(val)}</a>`
-            : `<span>${escapeHtml(val)}</span>`}
+        : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
       <div class="oa-agency">
@@ -1403,7 +1403,7 @@ function agencyCardHTML(p) {
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;">
         <span style="color:#1a56db;display:inline-flex;">${icon(ic, 15)}</span>
         ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g,''))}" style="color:#1a56db;text-decoration:none;font-weight:600;">${escapeHtml(val)}</a>`
-                : `<span>${escapeHtml(val)}</span>`}
+        : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
       <div style="margin-bottom:12px;padding:12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;text-align:left;">
@@ -2345,20 +2345,19 @@ function selectRole(btn) {
 }
 
 async function savePermission(userId, btn) {
+    if (_isSubmitting) return;                 // 진행 중이면 중복 차단
     const row = btn.closest('.perm-row');
     if (!row) return;
     const sel = row.querySelector('.perm-btn[data-role].on');
     const role = sel ? sel.dataset.role : 'regular';
-    const orig = btn.textContent;
-    btn.textContent = '저장 중…'; btn.disabled = true;
+    showLoading('권한을 저장하는 중…');          // 전체 로딩 오버레이(다른 조작 차단)
     try {
         await Api.updatePermission(userId, { role });
         showToast('역할을 저장했습니다');
-        btn.textContent = '저장됨';
-        setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200);
     } catch (e) {
         showToast('저장 실패: ' + e.message);
-        btn.textContent = orig; btn.disabled = false;
+    } finally {
+        hideLoading();
     }
 }
 
