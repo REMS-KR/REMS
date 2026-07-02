@@ -38,8 +38,13 @@ public class TenantService {
     }
 
     private boolean isBroker(UserEntity user) {
-        return ADMIN_UID.equals(user.getUid())
-                || (user.getAgencyName() != null && !user.getAgencyName().trim().isEmpty());
+        if (ADMIN_UID.equals(user.getUid())) return true;
+        UserPermissionEntity perm = userPermissionRepository.findByUser_Uid(user.getUid()).orElse(null);
+        if (perm != null && perm.getRole() != null) {
+            return "broker".equals(perm.getRole());
+        }
+        // 권한 레코드가 아직 없으면 사무소 정보로 기본 판정
+        return user.getAgencyName() != null && !user.getAgencyName().trim().isEmpty();
     }
 
     // 계약자 관리(중개사 전용) 접근 권한

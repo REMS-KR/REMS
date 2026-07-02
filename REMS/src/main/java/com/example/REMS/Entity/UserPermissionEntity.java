@@ -24,6 +24,9 @@ public class UserPermissionEntity {
     @JoinColumn(name = "user_id", unique = true)
     private UserEntity user;
 
+    // 역할: regular(일반유저=조회만) / broker(중개인=CRUD 전부) / admin(관리자=고정 1명)
+    private String role;
+
     private Boolean canCreate;   // 생성 권한
     private Boolean canRead;     // 조회 권한
     private Boolean canUpdate;   // 수정 권한

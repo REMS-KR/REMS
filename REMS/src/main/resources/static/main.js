@@ -228,10 +228,12 @@ function isAdminUser() {
     const u = getCurrentUser();
     return !!(u && u.uid === ADMIN_UID);
 }
-// 중개사 여부 — 관리자이거나 공인중개사사무소 정보를 등록한 회원
+// 중개사 여부 — 관리자이거나 역할이 broker (권한 로드 전에는 사무소 정보로 임시 판정)
 function isBroker() {
     const u = getCurrentUser();
-    return !!(u && (u.uid === ADMIN_UID || (u.agencyName && String(u.agencyName).trim())));
+    if (u && u.uid === ADMIN_UID) return true;
+    if (_myPerms && _myPerms.role) return _myPerms.role === 'broker';
+    return !!(u && u.agencyName && String(u.agencyName).trim());
 }
 // 현재 로그인 유저의 유효 권한. 관리자는 항상 전체 허용. 로드 전 기본값은 조회만 허용.
 function myPerms() {
@@ -2282,38 +2284,48 @@ async function openPermissionManager() {
 }
 
 function renderPermissionList(list) {
-    const cols = [['canCreate', '생성'], ['canRead', '조회'], ['canUpdate', '수정'], ['canDelete', '삭제']];
     if (!list.length) {
         document.getElementById('modal-body').innerHTML =
             '<div style="padding:24px;text-align:center;color:#9ca3af;">등록된 유저가 없습니다</div>';
         return;
     }
     document.getElementById('modal-body').innerHTML =
-        `<div style="font-size:12px;color:#6b7280;margin-bottom:10px;">각 유저의 생성·조회·수정·삭제 권한을 켜고 <b>저장</b>을 누르세요. (관리자는 항상 전체 허용)</div>` +
-        list.map(u => `
+        `<div style="font-size:12px;color:#6b7280;margin-bottom:10px;">각 유저의 역할을 정하고 <b>저장</b>을 누르세요. · <b>일반유저</b>=조회만 · <b>중개인</b>=생성·조회·수정·삭제 + 계약자 관리 · <b>관리자</b>=전체(고정)</div>` +
+        list.map(u => {
+            const role = u.admin ? 'admin' : (u.role || 'regular');
+            return `
       <div class="perm-row" data-user-id="${u.userId}">
         <div class="perm-user">
           <div class="perm-name">${escapeHtml(u.name || u.nickname || u.uid)}${u.admin ? '<span class="perm-admin">관리자</span>' : ''}</div>
           <div class="perm-uid">${escapeHtml(u.uid)}</div>
         </div>
-        <div class="perm-toggles">
-          ${cols.map(([k, label]) =>
-            `<button type="button" class="perm-btn ${u[k] ? 'on' : ''}" data-perm="${k}" ${u.admin ? 'disabled' : ''} onclick="this.classList.toggle('on')">${label}</button>`).join('')}
+        ${u.admin ? '<span class="perm-locked">관리자 (고정)</span>' : `
+        <div class="perm-toggles" role="group">
+          <button type="button" class="perm-btn ${role === 'regular' ? 'on' : ''}" data-role="regular" onclick="selectRole(this)">일반유저</button>
+          <button type="button" class="perm-btn ${role === 'broker' ? 'on' : ''}" data-role="broker" onclick="selectRole(this)">중개인</button>
         </div>
-        ${u.admin ? '<span class="perm-locked">고정</span>' : `<button class="perm-save" onclick="savePermission(${u.userId}, this)">저장</button>`}
-      </div>`).join('');
+        <button class="perm-save" onclick="savePermission(${u.userId}, this)">저장</button>`}
+      </div>`;
+        }).join('');
+}
+
+// 역할 버튼 단일 선택 (같은 행 안에서 하나만 on)
+function selectRole(btn) {
+    const row = btn.closest('.perm-row');
+    if (!row) return;
+    row.querySelectorAll('.perm-btn[data-role]').forEach(b => b.classList.toggle('on', b === btn));
 }
 
 async function savePermission(userId, btn) {
     const row = btn.closest('.perm-row');
     if (!row) return;
-    const dto = { canCreate: false, canRead: false, canUpdate: false, canDelete: false };
-    row.querySelectorAll('.perm-btn').forEach(b => { dto[b.dataset.perm] = b.classList.contains('on'); });
+    const sel = row.querySelector('.perm-btn[data-role].on');
+    const role = sel ? sel.dataset.role : 'regular';
     const orig = btn.textContent;
     btn.textContent = '저장 중…'; btn.disabled = true;
     try {
-        await Api.updatePermission(userId, dto);
-        showToast('권한을 저장했습니다');
+        await Api.updatePermission(userId, { role });
+        showToast('역할을 저장했습니다');
         btn.textContent = '저장됨';
         setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200);
     } catch (e) {

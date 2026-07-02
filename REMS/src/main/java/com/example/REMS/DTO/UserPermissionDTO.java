@@ -19,6 +19,7 @@ public class UserPermissionDTO {
     private String nickname;
     private String profileURL;
     private Boolean admin;       // 관리자 여부(uid 고정)
+    private String role;         // regular / broker / admin
     private Boolean canCreate;
     private Boolean canRead;
     private Boolean canUpdate;

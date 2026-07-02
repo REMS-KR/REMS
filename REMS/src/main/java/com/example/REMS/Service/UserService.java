@@ -147,28 +147,44 @@ public class UserService {
         return ADMIN_UID.equals(uid);
     }
 
-    // 권한 엔티티 조회(없으면 기본값으로 생성). 관리자는 항상 전체 허용으로 맞춘다.
+    // 역할 상수
+    public static final String ROLE_ADMIN = "admin";
+    public static final String ROLE_BROKER = "broker";
+    public static final String ROLE_REGULAR = "regular";
+
+    // 역할 → CRUD 플래그 동기화 (일반=조회만 / 중개인·관리자=전부)
+    private void applyRole(UserPermissionEntity perm, String role) {
+        boolean full = ROLE_ADMIN.equals(role) || ROLE_BROKER.equals(role);
+        perm.setRole(role);
+        perm.setCanCreate(full);
+        perm.setCanRead(true);
+        perm.setCanUpdate(full);
+        perm.setCanDelete(full);
+    }
+
+    // 권한 엔티티 조회(없으면 역할 기본값으로 생성). 관리자 uid는 항상 admin 역할로 강제.
     private UserPermissionEntity getOrCreatePermission(UserEntity user) {
         UserPermissionEntity perm = userPermissionRepository.findByUser_Id(user.getId()).orElse(null);
         if (perm == null) {
-            boolean admin = isAdmin(user.getUid());
-            // 중개사(사무소 정보 보유) 기본: 생성/수정/삭제 허용(본인 것만은 소유자 검증으로 별도 보장)
-            // 일반회원 기본: 조회만
-            boolean broker = user.getAgencyName() != null && !user.getAgencyName().trim().isEmpty();
-            perm = UserPermissionEntity.builder()
-                    .user(user)
-                    .canCreate(admin || broker)
-                    .canRead(true)              // 기본: 조회 허용
-                    .canUpdate(admin || broker)
-                    .canDelete(admin || broker)
-                    .build();
+            // 기본 역할: 관리자 uid → admin, 사무소 정보 보유 → broker, 그 외 → regular
+            String role = isAdmin(user.getUid()) ? ROLE_ADMIN
+                    : (user.getAgencyName() != null && !user.getAgencyName().trim().isEmpty() ? ROLE_BROKER : ROLE_REGULAR);
+            perm = UserPermissionEntity.builder().user(user).build();
+            applyRole(perm, role);
             perm = userPermissionRepository.save(perm);
+        }
+        // 관리자 uid는 언제나 admin 역할 보장
+        if (isAdmin(user.getUid()) && !ROLE_ADMIN.equals(perm.getRole())) {
+            applyRole(perm, ROLE_ADMIN);
+            userPermissionRepository.save(perm);
         }
         return perm;
     }
 
     private UserPermissionDTO toPermissionDTO(UserEntity user, UserPermissionEntity perm) {
         boolean admin = isAdmin(user.getUid());
+        String role = admin ? ROLE_ADMIN : (perm.getRole() != null ? perm.getRole() : ROLE_REGULAR);
+        boolean full = ROLE_ADMIN.equals(role) || ROLE_BROKER.equals(role);
         return UserPermissionDTO.builder()
                 .userId(user.getId())
                 .uid(user.getUid())
@@ -176,11 +192,12 @@ public class UserService {
                 .nickname(user.getNickname())
                 .profileURL(user.getProfileURL())
                 .admin(admin)
-                // 관리자는 저장값과 무관하게 항상 전체 허용
-                .canCreate(admin || Boolean.TRUE.equals(perm.getCanCreate()))
-                .canRead(admin || Boolean.TRUE.equals(perm.getCanRead()))
-                .canUpdate(admin || Boolean.TRUE.equals(perm.getCanUpdate()))
-                .canDelete(admin || Boolean.TRUE.equals(perm.getCanDelete()))
+                .role(role)
+                // 역할에서 파생: 일반=조회만, 중개인·관리자=전부
+                .canCreate(full)
+                .canRead(true)
+                .canUpdate(full)
+                .canDelete(full)
                 .build();
     }
 
@@ -224,12 +241,25 @@ public class UserService {
         UserEntity target = userRepository.findById(targetUserId)
                 .orElseThrow(() -> new IllegalArgumentException("대상 사용자를 찾을 수 없습니다"));
         UserPermissionEntity perm = getOrCreatePermission(target);
-        perm.setCanCreate(Boolean.TRUE.equals(dto.getCanCreate()));
-        perm.setCanRead(Boolean.TRUE.equals(dto.getCanRead()));
-        perm.setCanUpdate(Boolean.TRUE.equals(dto.getCanUpdate()));
-        perm.setCanDelete(Boolean.TRUE.equals(dto.getCanDelete()));
+
+        // 관리자 대상은 역할 변경 불가 (고정)
+        if (isAdmin(target.getUid())) {
+            return toPermissionDTO(target, perm);
+        }
+
+        // 역할 결정: dto.role 우선, 없으면(구버전 호환) CRUD 플래그로 추정
+        String role = dto.getRole();
+        if (role == null) {
+            boolean full = Boolean.TRUE.equals(dto.getCanCreate())
+                    || Boolean.TRUE.equals(dto.getCanUpdate())
+                    || Boolean.TRUE.equals(dto.getCanDelete());
+            role = full ? ROLE_BROKER : ROLE_REGULAR;
+        }
+        if (!ROLE_BROKER.equals(role) && !ROLE_REGULAR.equals(role)) role = ROLE_REGULAR;
+
+        applyRole(perm, role);
         userPermissionRepository.save(perm);
-        logger.info("{}번 유저 권한 수정 완료! (관리자: {})", targetUserId, uid);
+        logger.info("{}번 유저 역할 변경 완료! role={}, (관리자: {})", targetUserId, role, uid);
         return toPermissionDTO(target, perm);
     }
 
