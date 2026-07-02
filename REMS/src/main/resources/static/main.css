@@ -672,6 +672,9 @@ html:not(.mode-web) #bottom-sheet[data-mode="tab"] { height: 88vh; height: 88dvh
 /* 몰입 모드에서도 현위치/확대/축소/매물추가 버튼은 유지하고, 사라진 하단 메뉴 자리로 내려 배치 */
 #app.chrome-hidden .map-float-controls { bottom: max(26px, env(safe-area-inset-bottom)); opacity: 1; pointer-events: auto; }
 #app.chrome-hidden #add-btn-float { bottom: max(26px, env(safe-area-inset-bottom)); opacity: 1; pointer-events: auto; }
+/* 위치 설정 중에도 +/현위치/줌 버튼을 몰입 상태의 내려간 위치 그대로 유지 (다시 위로 올라오지 않게) */
+#app.picker-active .map-float-controls { bottom: max(26px, env(safe-area-inset-bottom)); }
+#app.picker-active #add-btn-float { bottom: max(26px, env(safe-area-inset-bottom)); }
 
 /* 2-1) 현재 위치 마커 — 네이버 지도앱 스타일(파란 점 + 방향 부채꼴 + 정확도 펄스) */
 .geo-loc-marker { position: relative; width: 44px; height: 44px; }
