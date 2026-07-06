@@ -30,6 +30,25 @@
         }).then(handleResponse);
     };
 
+    // ---- 전화 버튼 표시 제어: 중개인(broker) 권한 계정에만 노출 ----
+    // 건물 생성(+) 버튼과 동일하게 applyPermUI 타이밍에 맞춰 표시/숨김한다.
+    function applyCallBtnVisibility() {
+        const btn = document.getElementById('call-parse-float');
+        if (!btn) return;
+        const broker = (typeof isBroker === 'function') ? isBroker() : false;
+        btn.style.display = broker ? '' : 'none';   // '' → CSS 기본값(flex)로 복귀
+    }
+    // main.js의 applyPermUI 를 감싸 권한 로드 후에도 함께 갱신되게 함
+    if (typeof window.applyPermUI === 'function') {
+        const _origApplyPermUI = window.applyPermUI;
+        window.applyPermUI = function () {
+            _origApplyPermUI.apply(this, arguments);
+            applyCallBtnVisibility();
+        };
+    }
+    // 로드 시 즉시 1회 적용 (비중개인 계정에서 버튼이 잠깐 보이는 깜빡임 방지)
+    applyCallBtnVisibility();
+
     // ---- 최소 스타일 주입 (main.css 수정 없이) ---------------------
     function injectStyles() {
         if (document.getElementById('cp-styles')) return;
@@ -154,9 +173,9 @@
           <div class="form-group">
             <label class="form-label">건물 유형</label>
             ${selectHtml('cp-b-type', b.type, [
-                ['house', '단독&다중'], ['multiplex', '다세대'], ['officetel', '오피스텔'],
-                ['apartment', '아파트'], ['neighborhood', '근린생활시설'], ['commercial', '상가']
-            ])}
+            ['house', '단독&다중'], ['multiplex', '다세대'], ['officetel', '오피스텔'],
+            ['apartment', '아파트'], ['neighborhood', '근린생활시설'], ['commercial', '상가']
+        ])}
           </div>
           <div class="form-group">
             <label class="form-label">거래유형</label>
