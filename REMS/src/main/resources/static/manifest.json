@@ -2,7 +2,7 @@
   "name": "핵방노트",
   "short_name": "핵방노트",
   "description": "내 건물의 공실·임차·만기 현황을 지도에서 한눈에 관리하세요",
-  "start_url": "main.html",
+  "start_url": "index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
