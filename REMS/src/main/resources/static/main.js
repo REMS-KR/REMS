@@ -196,6 +196,16 @@ const Api = {
     deleteTenant: (id) =>
         fetch(`${API_BASE_URL}/tenant/${getUid()}/${id}`, { method: 'DELETE', headers: authHeaders() }).then(handleResponse),
 
+    // 고객(리드) 관리 (중개사 전용)
+    getCustomers: () =>
+        fetch(`${API_BASE_URL}/customer/${getUid()}`, { headers: authHeaders() }).then(handleResponse),
+    createCustomer: (dto) =>
+        fetch(`${API_BASE_URL}/customer/${getUid()}`, { method: 'POST', headers: authHeaders(true), body: JSON.stringify(dto) }).then(handleResponse),
+    updateCustomer: (id, dto) =>
+        fetch(`${API_BASE_URL}/customer/${getUid()}/${id}`, { method: 'PUT', headers: authHeaders(true), body: JSON.stringify(dto) }).then(handleResponse),
+    deleteCustomer: (id) =>
+        fetch(`${API_BASE_URL}/customer/${getUid()}/${id}`, { method: 'DELETE', headers: authHeaders() }).then(handleResponse),
+
     // 장소 검색 (/api/search/place) — 네이버 지역검색 프록시. 지도 중심(lat/lng)을 주면 가까운 순으로 정렬됨
     searchPlace: (query, lat, lng) => {
         let qs = `query=${encodeURIComponent(query)}`;
@@ -2120,8 +2130,8 @@ let _tenants = [];   // 계약자 목록 캐시
 
 function showStatsView() {   // (하단 '관리자' 탭 진입점 — 기존 호출부 호환 위해 이름 유지)
     const body = document.getElementById('sheet-body');
-    document.getElementById('sheet-title').textContent = '계약자 임차인 관리 리스트';
-    document.getElementById('sheet-subtitle').textContent = '중개사 전용 · 계약자/임차인 정보 관리';
+    document.getElementById('sheet-title').textContent = '계약자 · 고객 관리';
+    document.getElementById('sheet-subtitle').textContent = '중개사 전용 · 계약자(임차인)와 고객(리드) 관리';
 
     if (!isBroker()) {
         body.innerHTML = `<div class="empty-state">
@@ -2132,13 +2142,45 @@ function showStatsView() {   // (하단 '관리자' 탭 진입점 — 기존 호
         return;
     }
 
+    const sub = _statsSubTab || 'tenant';
+    const seg = (key, label) => `<button onclick="switchStatsSubTab('${key}')" style="flex:1;padding:9px 0;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;${sub === key ? 'background:#1a56db;color:#fff;' : 'background:transparent;color:#6b7280;'}">${label}</button>`;
     body.innerHTML = `
+      <div style="display:flex;gap:4px;background:#f3f4f6;border-radius:10px;padding:4px;margin-bottom:12px;">
+        ${seg('tenant', '계약자 관리')}${seg('customer', '고객 관리')}
+      </div>
+      <div id="stats-sub-body"></div>
+    `;
+    if (sub === 'customer') renderCustomerSub();
+    else renderTenantSub();
+}
+
+function switchStatsSubTab(which) {
+    _statsSubTab = which;
+    showStatsView();
+}
+
+function renderTenantSub() {
+    const box = document.getElementById('stats-sub-body');
+    if (!box) return;
+    box.innerHTML = `
       <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
         <button onclick="openTenantForm()" style="display:inline-flex;align-items:center;gap:5px;padding:8px 14px;border-radius:9px;border:none;background:#1a56db;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">${icon('plus', 15)} 계약자 추가</button>
       </div>
       <div id="tenant-list"><div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">불러오는 중…</div></div>
     `;
     loadTenants();
+}
+
+function renderCustomerSub() {
+    const box = document.getElementById('stats-sub-body');
+    if (!box) return;
+    box.innerHTML = `
+      <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+        <button onclick="openCustomerForm()" style="display:inline-flex;align-items:center;gap:5px;padding:8px 14px;border-radius:9px;border:none;background:#1a56db;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">${icon('plus', 15)} 고객 추가</button>
+      </div>
+      <div id="customer-list"><div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">불러오는 중…</div></div>
+    `;
+    loadCustomers();
 }
 
 async function loadTenants() {
@@ -2170,10 +2212,14 @@ function renderTenantList() {
             ? `보 ${(t.deposit || 0).toLocaleString()} / 월 ${t.rent.toLocaleString()}`
             : `보증금 ${(t.deposit || 0).toLocaleString()}만`;
         const period = (t.contractStart || t.contractEnd) ? `${t.contractStart || '?'} ~ ${t.contractEnd || '?'}` : '';
+        const dd = ddayLabel(t.contractEnd);
         return `<div class="tenant-card" onclick="openTenantForm('${t.id}')">
           <div class="tenant-top">
             <div class="tenant-bldg">${escapeHtml(t.buildingName || '건물 미입력')}${t.unitName ? ` <span class="tenant-unit">${escapeHtml(t.unitName)}</span>` : ''}</div>
-            <div class="tenant-phone">${icon('phone', 13)} ${escapeHtml(t.phone || '-')}</div>
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+              ${dd ? `<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:${dd.bg};color:${dd.fg};">${dd.text}</span>` : ''}
+              <span class="tenant-phone">${icon('phone', 13)} ${escapeHtml(t.phone || '-')}</span>
+            </div>
           </div>
           <div class="tenant-meta">
             <span class="tenant-price">${priceLine}${(t.manage || 0) > 0 ? ` · 관리 ${t.manage}만` : ''}</span>
@@ -2253,6 +2299,181 @@ async function deleteTenant(id) {
         closeModal();
         await loadTenants();
         showToast('계약자가 삭제되었습니다');
+    } catch (e) {
+        showToast('삭제 실패: ' + e.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+// =====================================================
+// D-day 라벨 (계약 만료일 기준) — 전체 계약자 리스트에 표시
+// =====================================================
+function ddayLabel(endStr) {
+    if (!endStr) return null;
+    const end = new Date(String(endStr) + 'T00:00:00');
+    if (isNaN(end.getTime())) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const diff = Math.round((end - today) / 86400000);
+    if (diff < 0)   return { text: `만료 D+${-diff}`, bg: '#fee2e2', fg: '#b91c1c' };
+    if (diff === 0) return { text: 'D-DAY',          bg: '#fef3c7', fg: '#b45309' };
+    if (diff <= 30) return { text: `D-${diff}`,       bg: '#fef3c7', fg: '#b45309' };
+    if (diff <= 90) return { text: `D-${diff}`,       bg: '#e0edff', fg: '#1e40af' };
+    return             { text: `D-${diff}`,           bg: '#f3f4f6', fg: '#6b7280' };
+}
+
+// =====================================================
+// 고객(리드) 관리 (중개사 전용)
+// =====================================================
+let _statsSubTab = 'tenant';   // 'tenant' | 'customer'
+let _customers = [];
+const CUST_SENS = {
+    high: { label: '상', bg: '#fee2e2', fg: '#b91c1c' },
+    mid:  { label: '중', bg: '#fef3c7', fg: '#b45309' },
+    low:  { label: '하', bg: '#e5e7eb', fg: '#4b5563' }
+};
+
+async function loadCustomers() {
+    const box = document.getElementById('customer-list');
+    try {
+        _customers = (await Api.getCustomers()) || [];
+        _customers.forEach(c => c.id = String(c.id));
+    } catch (e) {
+        _customers = [];
+        if (box) box.innerHTML = `<div style="padding:20px;text-align:center;color:#dc2626;font-size:13px;">불러오기 실패: ${escapeHtml(e.message)}</div>`;
+        return;
+    }
+    renderCustomerList();
+}
+
+function renderCustomerList() {
+    const box = document.getElementById('customer-list');
+    if (!box) return;
+    if (!_customers.length) {
+        box.innerHTML = `<div class="empty-state">
+          <div class="empty-state-icon">${icon('user', 52, 'color:#9ca3af;')}</div>
+          <div class="empty-state-title">등록된 고객이 없습니다</div>
+          <div class="empty-state-sub">‘고객 추가’ 또는 통화 녹음으로 첫 고객을 등록해보세요</div>
+        </div>`;
+        return;
+    }
+    box.innerHTML = _customers.map(c => {
+        const s = c.sensitivity && CUST_SENS[c.sensitivity];
+        let title = (c.summary && c.summary.trim()) ? c.summary.trim() : (c.location || c.phone || '고객');
+        if (title.length > 60) title = title.slice(0, 60) + '…';
+        const bits = [];
+        if (c.amount) bits.push(escapeHtml(c.amount));
+        if (c.location) bits.push(escapeHtml(c.location));
+        if (c.moveInDate) bits.push('입주 ' + escapeHtml(c.moveInDate));
+        return `<div class="tenant-card" onclick="openCustomerForm('${c.id}')">
+          <div class="tenant-top">
+            <div class="tenant-bldg" style="line-height:1.5;">${escapeHtml(title)}</div>
+            ${s ? `<span style="flex-shrink:0;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:${s.bg};color:${s.fg};">감도 ${s.label}</span>` : ''}
+          </div>
+          <div class="tenant-meta">
+            <span class="tenant-phone">${icon('phone', 13)} ${escapeHtml(c.phone || '-')}</span>
+            ${bits.length ? `<span class="tenant-period">${bits.join(' · ')}</span>` : ''}
+            ${c.meetingDate ? `<span style="margin-left:auto;font-size:12px;font-weight:700;color:#1e40af;">미팅 ${escapeHtml(c.meetingDate)}</span>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+}
+
+// 고객 추가/수정 폼 — prefill 있으면 신규 폼에 미리 채움(AI 초안). call-parse.js 에서도 호출.
+function openCustomerForm(id, prefill) {
+    const c = id ? _customers.find(x => x.id === id) : (prefill || null);
+    const isEdit = !!id;
+    document.getElementById('modal-title').textContent = isEdit ? '고객 수정' : '고객 등록';
+    const v = k => (c && c[k] != null) ? escapeHtml(String(c[k])) : '';
+    const sens = (c && c.sensitivity) ? c.sensitivity : '';
+    const sBtn = (key, label) => `<button type="button" onclick="cfSetSens('${key}')" data-sens="${key}" class="cf-sens-btn" style="flex:1;padding:9px 0;border-radius:8px;border:1px solid #e5e7eb;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;${sens === key ? `background:${CUST_SENS[key].bg};color:${CUST_SENS[key].fg};border-color:${CUST_SENS[key].fg};` : 'background:#fff;color:#6b7280;'}">${label}</button>`;
+    document.getElementById('modal-body').innerHTML = `
+      <div class="form-group">
+        <label class="form-label">요약</label>
+        <textarea id="cf-summary" class="form-textarea" style="min-height:70px;" placeholder="고객 니즈 요약">${v('summary')}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">감도 <span style="font-weight:400;color:#9ca3af;">(직접 선택)</span></label>
+        <input type="hidden" id="cf-sens" value="${sens}">
+        <div style="display:flex;gap:6px;">${sBtn('high', '상')}${sBtn('mid', '중')}${sBtn('low', '하')}</div>
+      </div>
+      <div class="form-group"><label class="form-label">전화번호</label>
+        <input id="cf-phone" class="form-input" type="tel" placeholder="010-0000-0000" value="${v('phone')}"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">금액</label>
+          <input id="cf-amount" class="form-input" type="text" placeholder="예: 매매 3억 / 보5000·월50" value="${v('amount')}"></div>
+        <div class="form-group"><label class="form-label">위치</label>
+          <input id="cf-location" class="form-input" type="text" placeholder="희망 지역" value="${v('location')}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">입주 희망일</label>
+          <input id="cf-move" class="form-input" type="text" placeholder="예: 2026-03-01 / 3월 초" value="${v('moveInDate')}"></div>
+        <div class="form-group"><label class="form-label">미팅 날짜</label>
+          <input id="cf-meeting" class="form-input" type="text" placeholder="예: 2026-02-10" value="${v('meetingDate')}"></div>
+      </div>
+      <div class="form-group"><label class="form-label">대출</label>
+        <input id="cf-loan" class="form-input" type="text" placeholder="예: 버팀목 대출 희망" value="${v('loan')}"></div>
+      <div class="form-group"><label class="form-label">메모</label>
+        <textarea id="cf-memo" class="form-textarea" style="min-height:60px;" placeholder="특이사항">${v('memo')}</textarea>
+      </div>
+    `;
+    document.getElementById('modal-footer').innerHTML = `
+      ${isEdit && myPerms().canDelete ? `<button class="btn-danger" onclick="deleteCustomer('${c.id}')">삭제</button>` : ''}
+      <button class="btn-secondary" onclick="closeModal()">취소</button>
+      <button class="btn-primary" onclick="saveCustomer('${isEdit ? c.id : ''}')">저장</button>
+    `;
+    showModal();
+}
+
+// 감도 수기 선택
+function cfSetSens(key) {
+    const hidden = document.getElementById('cf-sens');
+    if (hidden) hidden.value = key;
+    document.querySelectorAll('.cf-sens-btn').forEach(b => {
+        const k = b.getAttribute('data-sens');
+        if (k === key) { b.style.background = CUST_SENS[k].bg; b.style.color = CUST_SENS[k].fg; b.style.borderColor = CUST_SENS[k].fg; }
+        else { b.style.background = '#fff'; b.style.color = '#6b7280'; b.style.borderColor = '#e5e7eb'; }
+    });
+}
+
+async function saveCustomer(id) {
+    if (_isSubmitting) return;
+    const g = fid => (document.getElementById(fid) ? document.getElementById(fid).value.trim() : '');
+    const dto = {
+        summary: g('cf-summary'),
+        sensitivity: g('cf-sens') || null,
+        phone: g('cf-phone'),
+        amount: g('cf-amount'),
+        location: g('cf-location'),
+        moveInDate: g('cf-move'),
+        meetingDate: g('cf-meeting'),
+        loan: g('cf-loan'),
+        memo: g('cf-memo')
+    };
+    if (!dto.summary && !dto.phone) { showToast('요약 또는 전화번호를 입력하세요'); return; }
+    showLoading(id ? '고객 정보를 저장하는 중…' : '고객을 등록하는 중…');
+    try {
+        if (id) await Api.updateCustomer(id, dto);
+        else await Api.createCustomer(dto);
+        closeModal();
+        if (document.getElementById('customer-list')) await loadCustomers();
+        showToast(id ? '고객 정보가 수정되었습니다' : '고객이 등록되었습니다');
+    } catch (e) {
+        showToast('저장 실패: ' + e.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function deleteCustomer(id) {
+    if (_isSubmitting) return;
+    if (!confirm('이 고객을 삭제하시겠습니까?')) return;
+    showLoading('고객을 삭제하는 중…');
+    try {
+        await Api.deleteCustomer(id);
+        closeModal();
+        if (document.getElementById('customer-list')) await loadCustomers();
+        showToast('고객이 삭제되었습니다');
     } catch (e) {
         showToast('삭제 실패: ' + e.message);
     } finally {

@@ -29,6 +29,15 @@
             method: 'POST', headers: authHeaders(), body: fd
         }).then(handleResponse);
     };
+    // POST /ai/parse-call/customer (multipart: uid + audio) → CustomerDTO 초안
+    Api.parseCallCustomer = (file) => {
+        const fd = new FormData();
+        fd.append('uid', getUid());
+        fd.append('audio', file);
+        return fetch(`${API_BASE_URL}/ai/parse-call/customer`, {
+            method: 'POST', headers: authHeaders(), body: fd
+        }).then(handleResponse);
+    };
 
     // ---- 전화 버튼 표시 제어: 중개인(broker) 권한 계정에만 노출 ----
     // 건물 생성(+) 버튼과 동일하게 applyPermUI 타이밍에 맞춰 표시/숨김한다.
@@ -75,6 +84,12 @@
         background:var(--white);color:var(--gray-600);font-weight:600;font-size:13px;cursor:pointer;font-family:var(--font);}
       .cp-add-unit:hover{border-color:var(--blue);color:var(--blue);}
       .cp-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gray-700);margin-bottom:10px;}
+      .cp-choice{display:flex;align-items:center;gap:12px;width:100%;padding:16px;border:1px solid var(--gray-200);
+        border-radius:var(--radius-md);background:var(--white);cursor:pointer;font-family:var(--font);
+        color:var(--gray-500);transition:border-color .15s,background .15s;}
+      .cp-choice:hover{border-color:var(--blue);background:var(--blue-light);color:var(--blue);}
+      .cp-choice-t{font-size:15px;font-weight:700;color:var(--gray-900);}
+      .cp-choice-s{font-size:12px;color:var(--gray-500);margin-top:2px;}
     `;
         const el = document.createElement('style');
         el.id = 'cp-styles';
@@ -82,15 +97,42 @@
         document.head.appendChild(el);
     }
 
-    // ---- 1) 업로드 모달 -------------------------------------------
+    // ---- 0) 유형 선택 모달 (계약자 / 고객) ------------------------
     window.openCallParseModal = function () {
         // 생성 권한자(중개인/관리자)만 사용
         if (!myPerms().canCreate) { showToast('생성 권한이 있는 중개인만 사용할 수 있습니다'); return; }
         injectStyles();
+        document.getElementById('modal-title').textContent = '통화 녹음으로 등록';
+        document.getElementById('modal-body').innerHTML = `
+      <div class="cp-note">어떤 통화 녹음인가요? 유형에 맞게 자동으로 정리해 드립니다.</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button class="cp-choice" onclick="openTenantCallModal()">
+          ${icon('building', 22)}
+          <div style="text-align:left;">
+            <div class="cp-choice-t">계약자 (임차인)</div>
+            <div class="cp-choice-s">건물·호실·계약자 정보로 정리</div>
+          </div>
+        </button>
+        <button class="cp-choice" onclick="openCustomerCallModal()">
+          ${icon('user', 22)}
+          <div style="text-align:left;">
+            <div class="cp-choice-t">고객 (상담·리드)</div>
+            <div class="cp-choice-s">요약·전화·금액·입주희망일·위치·대출·미팅 정리</div>
+          </div>
+        </button>
+      </div>
+    `;
+        document.getElementById('modal-footer').innerHTML = `<button class="btn-secondary" onclick="closeModal()">취소</button>`;
+        showModal();
+    };
+
+    // ---- 1) 계약자(임차인) 업로드 모달 ----------------------------
+    window.openTenantCallModal = function () {
+        injectStyles();
         _pickedFile = null;
         _callDraft = null;
 
-        document.getElementById('modal-title').textContent = '통화 녹음으로 등록';
+        document.getElementById('modal-title').textContent = '계약자 통화 녹음';
         document.getElementById('modal-body').innerHTML = `
       <div class="cp-note">
         통화 녹음 파일(m4a·mp3·wav 등)을 올리면 음성을 텍스트로 바꾸고
@@ -104,7 +146,7 @@
       <input id="cp-file" type="file" accept="audio/*,.m4a,.mp3,.wav,.amr,.aac,.ogg" style="display:none">
     `;
         document.getElementById('modal-footer').innerHTML = `
-      <button class="btn-secondary" onclick="closeModal()">취소</button>
+      <button class="btn-secondary" onclick="openCallParseModal()">뒤로</button>
       <button class="btn-primary" id="cp-start-btn" onclick="startCallParse()">분석 시작</button>
     `;
 
@@ -131,6 +173,57 @@
             showToast('분석 실패: ' + (e.message || e));
         } finally {
             hideLoading();
+        }
+    };
+
+    // ---- 고객 업로드 모달 -----------------------------------------
+    window.openCustomerCallModal = function () {
+        injectStyles();
+        _pickedFile = null;
+
+        document.getElementById('modal-title').textContent = '고객 통화 녹음';
+        document.getElementById('modal-body').innerHTML = `
+      <div class="cp-note">
+        고객 상담 녹음을 올리면 요약·전화번호·금액·입주희망일·위치·대출·미팅날짜·메모를
+        자동 정리합니다. (감도는 확인 화면에서 직접 선택)
+      </div>
+      <div class="cp-drop" onclick="document.getElementById('cpc-file').click()">
+        ${icon('phone', 26)}
+        <div>여기를 눌러 녹음 파일 선택</div>
+        <div class="cp-fname" id="cpc-fname"></div>
+      </div>
+      <input id="cpc-file" type="file" accept="audio/*,.m4a,.mp3,.wav,.amr,.aac,.ogg" style="display:none">
+    `;
+        document.getElementById('modal-footer').innerHTML = `
+      <button class="btn-secondary" onclick="openCallParseModal()">뒤로</button>
+      <button class="btn-primary" onclick="startCustomerParse()">분석 시작</button>
+    `;
+        document.getElementById('cpc-file').addEventListener('change', (e) => {
+            _pickedFile = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+            const fn = document.getElementById('cpc-fname');
+            if (fn) fn.textContent = _pickedFile ? _pickedFile.name : '';
+        });
+        showModal();
+    };
+
+    // ---- 고객 분석 → main.js 고객 폼을 AI 초안으로 채워서 오픈 ----
+    window.startCustomerParse = async function () {
+        if (_isSubmitting) return;
+        if (!_pickedFile) { showToast('녹음 파일을 선택하세요'); return; }
+
+        showLoading('음성 인식 후 고객 정보를 정리하는 중…');
+        try {
+            const draft = await Api.parseCallCustomer(_pickedFile);
+            hideLoading();
+            if (typeof openCustomerForm === 'function') {
+                // 신규 고객 폼에 AI 초안 미리 채움 (감도는 수기 선택, 저장 시 /customer 로 생성)
+                openCustomerForm(null, draft || {});
+            } else {
+                showToast('고객 폼을 열 수 없습니다 (main.js 확인)');
+            }
+        } catch (e) {
+            hideLoading();
+            showToast('분석 실패: ' + (e.message || e));
         }
     };
 
@@ -173,9 +266,9 @@
           <div class="form-group">
             <label class="form-label">건물 유형</label>
             ${selectHtml('cp-b-type', b.type, [
-            ['house', '단독&다중'], ['multiplex', '다세대'], ['officetel', '오피스텔'],
-            ['apartment', '아파트'], ['neighborhood', '근린생활시설'], ['commercial', '상가']
-        ])}
+                ['house', '단독&다중'], ['multiplex', '다세대'], ['officetel', '오피스텔'],
+                ['apartment', '아파트'], ['neighborhood', '근린생활시설'], ['commercial', '상가']
+            ])}
           </div>
           <div class="form-group">
             <label class="form-label">거래유형</label>
