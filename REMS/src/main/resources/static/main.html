@@ -90,6 +90,11 @@
             </button>
         </div>
         <button id="add-btn-float" title="건물 추가">+</button>
+        <button id="call-parse-float" title="통화 녹음으로 등록" onclick="openCallParseModal()"
+                style="position:absolute; right:16px; bottom:150px; z-index:40;
+                       width:52px; height:52px; border-radius:50%; border:none;
+                       background:#0d9451; color:#fff; box-shadow:0 4px 12px rgba(0,0,0,.2);
+                       cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:24px;">☎</button>
     </div>
 
     <!-- BOTTOM SHEET -->
@@ -162,6 +167,7 @@
 
 <script src="config.js?v=1.0.0"></script>
 <script src="main.js?v=1.0.0"></script>
+<script src="call-parse.js?v=1.0.0"></script>
 <!-- 네이버맵 SDK 동적 로드 -->
 <script>
     (function () {
