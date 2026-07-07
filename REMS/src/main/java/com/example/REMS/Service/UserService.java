@@ -141,7 +141,7 @@ public class UserService {
     // =====================================================
     // 권한 관리 (관리자 전용) — 모든 오브젝트 생성/조회/수정/삭제 허용 여부
     // =====================================================
-    private static final String ADMIN_UID = "3635939452";   // 관리자 uid (고정)
+    private static final String ADMIN_UID = "4979532269";   // 관리자 uid (고정)
 
     public boolean isAdmin(String uid) {
         return ADMIN_UID.equals(uid);

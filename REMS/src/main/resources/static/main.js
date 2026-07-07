@@ -231,7 +231,7 @@ function setCurrentUser(u) {
 // =====================================================
 // 권한 (생성/조회/수정/삭제) — 관리자 uid 고정, 그 외는 서버에서 받은 권한으로 게이팅
 // =====================================================
-const ADMIN_UID = '3635939452';
+const ADMIN_UID = '4979532269';
 let _myPerms = null;   // { admin, canCreate, canRead, canUpdate, canDelete }
 
 function isAdminUser() {

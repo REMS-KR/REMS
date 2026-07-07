@@ -38,7 +38,7 @@ public class BuildingService {
     private final UserRepository userRepository;
     private final com.example.REMS.Repository.UserPermissionRepository userPermissionRepository;
 
-    private static final String ADMIN_UID = "3635939452";
+    private static final String ADMIN_UID = "4979532269";
 
     // 권한 체크 — 관리자는 통과, 그 외에는 저장된 권한 플래그로 판단.
     //  action: "CREATE" / "UPDATE" / "DELETE"  (조회 차단은 프론트에서 처리)

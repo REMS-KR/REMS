@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 public class CustomerService {
 
     private static final Logger logger = LoggerFactory.getLogger(CustomerService.class);
-    private static final String ADMIN_UID = "3635939452";
+    private static final String ADMIN_UID = "4979532269";
 
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;

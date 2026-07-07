@@ -27,7 +27,7 @@ public class UnitService {
     private final UserRepository userRepository;
     private final com.example.REMS.Repository.UserPermissionRepository userPermissionRepository;
 
-    private static final String ADMIN_UID = "3635939452";
+    private static final String ADMIN_UID = "4979532269";
 
     // 권한 체크 — 관리자는 통과, 그 외엔 저장된 플래그로 판단 (CREATE/UPDATE/DELETE)
     private void requirePermission(String uid, String action) {

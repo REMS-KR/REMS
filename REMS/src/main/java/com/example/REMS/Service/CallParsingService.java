@@ -23,7 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class CallParsingService {
 
     private static final Logger logger = LoggerFactory.getLogger(CallParsingService.class);
-    private static final String ADMIN_UID = "3635939452";
+    private static final String ADMIN_UID = "4979532269";
 
     private final ClovaSpeechService clovaSpeechService;
     private final LlmExtractionService llmExtractionService;
