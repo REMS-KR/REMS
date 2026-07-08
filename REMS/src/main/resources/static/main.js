@@ -2504,7 +2504,7 @@ function showSettingsView() {
       ${me.email ? `<div class="profile-sub">${escapeHtml(me.email)}</div>` : ''}
 
       <!-- [B] edit by smsong - 내 공인중개사사무소 정보 요약 -->
-      ${agencyCardHTML(me) || `<div style="margin:6px 0 2px;font-size:12.5px;color:#9ca3af;">공인중개사사무소 정보가 없습니다. ‘내 정보 수정’에서 등록하세요.</div>`}
+      ${agencyCardHTML(me) || (isBroker() ? `<div style="margin:6px 0 2px;font-size:12.5px;color:#9ca3af;">공인중개사사무소 정보가 없습니다. ‘내 정보 수정’에서 등록하세요.</div>` : '')}
       <!-- [E] edit by smsong -->
 
       <input type="file" id="profile-file" accept="image/*" style="display:none" onchange="changeProfilePhoto(event)">
@@ -2602,12 +2602,14 @@ function openProfileEdit() {
       ${field('pe-email', '이메일', me.email, 'example@email.com', 'email')}
       ${field('pe-phone', '휴대폰', me.phone, '010-0000-0000', 'tel')}
       ${field('pe-address', '주소', me.address, '주소')}
+      ${isBroker() ? `
       <div style="display:flex;align-items:center;gap:6px;margin:18px 0 10px;font-size:13px;font-weight:800;color:#1a56db;">
         ${icon('agency',16)} 공인중개사사무소 정보
       </div>
       ${field('pe-agency-name', '사무소 이름', me.agencyName, '○○공인중개사사무소')}
       ${field('pe-agency-phone', '사무소 전화번호', me.agencyPhone, '02-000-0000', 'tel')}
       ${field('pe-agency-address', '사무소 주소', me.agencyAddress, '사무소 주소')}
+      ` : ''}
     `;
     document.getElementById('modal-footer').innerHTML = `
       <button class="btn-secondary" onclick="closeModal()">취소</button>
@@ -2629,11 +2631,19 @@ async function saveProfileEdit() {
         nickname: v('pe-nickname'),
         email: v('pe-email'),
         phone: v('pe-phone'),
-        address: v('pe-address'),
-        agencyName: v('pe-agency-name'),
-        agencyPhone: v('pe-agency-phone'),
-        agencyAddress: v('pe-agency-address')
+        address: v('pe-address')
     };
+    // 공인중개사사무소 정보 — 관리자/중개인만 수정 폼에 노출됨.
+    // 일반 유저는 입력칸이 없으므로 기존 값을 그대로 유지(빈값 덮어쓰기 방지).
+    if (document.getElementById('pe-agency-name')) {
+        dto.agencyName = v('pe-agency-name');
+        dto.agencyPhone = v('pe-agency-phone');
+        dto.agencyAddress = v('pe-agency-address');
+    } else {
+        dto.agencyName = me.agencyName;
+        dto.agencyPhone = me.agencyPhone;
+        dto.agencyAddress = me.agencyAddress;
+    }
     try {
         showLoading('내 정보를 저장하는 중…');
         const updated = await Api.updateUser(dto);   // 파일 없이 JSON 부분 업데이트
