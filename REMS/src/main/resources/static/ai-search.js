@@ -1,17 +1,20 @@
 /* =====================================================================
- * ai-search.js — AI 자연어 매물 검색 (중개인 전용)
+ * ai-search.js — AI 자연어 매물 검색 (중개인 전용)  [자체 스타일 주입 버전]
+ *
+ * 이 버전은 필요한 CSS를 스스로 <style>로 주입합니다.
+ *  → main.css 를 수정하지 않아도 버튼/모달/결과 스타일이 항상 적용됩니다.
+ *    (기존 ai-search-append.css 는 더 이상 붙여넣지 않아도 됩니다)
  *
  * 동작
  *   1) 플로팅 버튼(+ / 통화 버튼과 동일한 44×44 스타일) → 모달 오픈
  *   2) 자연어 입력 → POST /ai/search/{uid}
- *   3) 서버가 (제미나이로 조건 추출 + 코드로 정확히 선별)한 결과를
- *      기존 목록 카드(buildingListItemHTML)로 하단 시트에 표시
+ *   3) 서버가 선별한 결과를 기존 목록 카드로 하단 시트에 표시
  *
- * main.js 로드 이후에 불러야 함(전역 함수 재사용):
+ * main.js 로드 이후에 불러야 함(전역 재사용):
  *   getUid, authHeaders, handleResponse, API_BASE_URL, isBroker, applyPermUI,
- *   showModal, closeModal, showToast, showLoading, hideLoading,
- *   buildingListItemHTML, selectBuilding, Sheet, effectiveStatus,
- *   hydrateOwnerNames, icon, state
+ *   getCurrentUser, ADMIN_UID, showModal, closeModal, showToast, showLoading,
+ *   hideLoading, buildingListItemHTML, selectBuilding, Sheet, effectiveStatus,
+ *   hydrateOwnerNames, icon, escapeHtml, state
  * ===================================================================== */
 (function () {
     'use strict';
@@ -26,7 +29,61 @@
             }).then(handleResponse);
     }
 
-    // ---- 플로팅 버튼 생성 (HTML 수정 없이 #map-wrap 에 주입) ----
+    // =====================================================
+    // 스타일 자체 주입 (main.css 수정 불필요)
+    // =====================================================
+    const AI_CSS = `
+/* AI 검색 버튼 — 통화 버튼(#call-parse-float) 위에 같은 규격으로 쌓임 */
+#ai-search-float {
+    position: absolute; right: 14px; bottom: 270px; z-index: 50;
+    width: 44px; height: 44px; border-radius: 12px;
+    background: #6d28d9; border: none; color: #ffffff;
+    box-shadow: var(--shadow-md, 0 4px 12px rgba(0,0,0,0.15), 0 2px 6px rgba(0,0,0,0.10));
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    transition: opacity 0.3s ease, transform 0.25s cubic-bezier(0.34,1.56,0.64,1),
+                background 0.25s, box-shadow 0.2s, bottom 0.4s cubic-bezier(0.4,0,0.2,1);
+}
+#ai-search-float:active { transform: scale(0.93); }
+#app.chrome-hidden #ai-search-float { bottom: calc(max(26px, env(safe-area-inset-bottom)) + 108px); opacity: 1; pointer-events: auto; }
+#app.picker-active #ai-search-float { opacity: 0; pointer-events: none; transform: scale(0.85); }
+html.mode-web #ai-search-float { right: 18px; bottom: 132px; }
+
+/* AI 검색 모달 내부 */
+.ai-search-intro {
+    font-size: 13px; color: var(--gray-600, #4b5563); line-height: 1.6;
+    background: #f5f3ff; border: 1px solid #ede9fe; border-radius: var(--radius-md, 12px);
+    padding: 12px 14px; margin-bottom: 16px;
+}
+.ai-search-intro b { color: #6d28d9; }
+.ai-ex-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+.ai-ex-chip {
+    font-size: 12.5px; color: var(--gray-700, #374151); font-weight: 600;
+    background: var(--gray-100, #f3f4f6); border: 1px solid var(--gray-200, #e5e7eb);
+    border-radius: 999px; padding: 7px 12px; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.ai-ex-chip:hover { background: #f5f3ff; border-color: #ddd6fe; color: #6d28d9; }
+.ai-ex-chip:active { transform: scale(0.97); }
+
+/* AI 검색 결과 배너 (하단 시트 상단) */
+.ai-result-banner {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 700; color: #6d28d9;
+    background: #f5f3ff; border: 1px solid #ede9fe; border-radius: var(--radius-md, 12px);
+    padding: 10px 12px; margin: 0 0 12px;
+}
+.ai-result-banner-ic { display: inline-flex; flex-shrink: 0; }
+`;
+
+    function ensureStyles() {
+        if (document.getElementById('ai-search-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'ai-search-styles';
+        style.textContent = AI_CSS;
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    // ---- 플로팅 버튼 생성 (HTML/CSS 수정 없이 #map-wrap 에 주입) ----
     function ensureButton() {
         if (document.getElementById('ai-search-float')) return;
         const mapWrap = document.getElementById('map-wrap');
@@ -35,6 +92,9 @@
         btn.id = 'ai-search-float';
         btn.title = 'AI 매물 검색';
         btn.setAttribute('aria-label', 'AI 매물 검색');
+        // ★ CSS 주입이 혹시 막혀도 지도(#map, absolute)에 가려지지 않도록 최소 위치 안전장치(인라인)
+        btn.style.position = 'absolute';
+        btn.style.zIndex = '50';
         // 스파클(AI) 아이콘 — 라인 스타일로 기존 아이콘과 통일
         btn.innerHTML =
             '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
@@ -56,20 +116,19 @@
         } catch (_) { return false; }
     }
 
-    // 중개인/관리자에게만 노출 (권한 미로딩 시엔 isBroker 의 임시 판정을 따름)
+    // 중개인/관리자에게만 노출
     function updateButtonVisibility() {
         const btn = document.getElementById('ai-search-float');
-        if (!btn) { console.warn('[ai-search] 버튼이 아직 없음 (map-wrap 미준비)'); return; }
+        if (!btn) return;
         const broker = (typeof isBroker === 'function') ? isBroker() : false;
         const show = isAdmin() || broker;
-        btn.style.display = show ? '' : 'none';
+        btn.style.display = show ? 'flex' : 'none';
         if (!show) console.info('[ai-search] 버튼 숨김 — isAdmin=%s, isBroker=%s', isAdmin(), broker);
     }
 
     // main.js 의 applyPermUI 생명주기에 편승해 버튼 노출을 갱신
     if (typeof applyPermUI === 'function') {
         const _origApplyPermUI = applyPermUI;
-        // 전역 재정의 — 클래식 스크립트에서 bare 호출도 이 래퍼를 참조
         window.applyPermUI = function () {
             _origApplyPermUI.apply(this, arguments);
             updateButtonVisibility();
@@ -79,7 +138,7 @@
     // =====================================================
     // 모달
     // =====================================================
-    // ICON_PATHS 에 'search'가 없어 인라인 돋보기 SVG 사용 (상단바 검색 아이콘과 동일 형태)
+    // ICON_PATHS 에 'search'가 없어 인라인 돋보기 SVG 사용
     function searchSvg(size) {
         const s = size || 15;
         return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" `
@@ -96,7 +155,7 @@
     ];
 
     window.openAiSearchModal = function openAiSearchModal() {
-        if (typeof isBroker === 'function' && !isBroker()) {
+        if (!(isAdmin() || (typeof isBroker === 'function' && isBroker()))) {
             showToast('AI 매물 검색은 중개인만 사용할 수 있습니다.');
             return;
         }
@@ -141,7 +200,7 @@
     // 검색 실행
     // =====================================================
     window.runAiSearch = async function runAiSearch() {
-        if (_isSubmitting) return;                       // 중복 호출 차단 (기존 가드 재사용)
+        if (_isSubmitting) return;
         const t = document.getElementById('ai-q');
         const query = (t && t.value || '').trim();
         if (!query) { showToast('검색어를 입력하세요.'); return; }
@@ -163,11 +222,8 @@
     // =====================================================
     function renderAiResults(resp, query) {
         const rawList = (resp && resp.buildings) || [];
-
-        // 목록 카드/상세가 기대하는 형태로 정규화 + state 에 병합
-        //  (selectBuilding 이 state.buildings 에서 id로 찾으므로 반드시 병합)
         const list = rawList.map(normalizeBuilding);
-        mergeIntoState(list);
+        mergeIntoState(list);   // selectBuilding 이 state.buildings 에서 찾으므로 병합 필수
 
         const title = document.getElementById('sheet-title');
         const subtitle = document.getElementById('sheet-subtitle');
@@ -194,12 +250,9 @@
         }
 
         if (body) body.scrollTop = 0;
-
-        // 하단 시트를 전체로 올림 (탭 전환과 동일한 방식)
         if (typeof Sheet !== 'undefined' && Sheet.open) Sheet.open('tab', 'full');
     }
 
-    // main.js loadData 와 동일한 정규화 (id 문자열화 + 표시상 공실 반영)
     function normalizeBuilding(b) {
         const nb = Object.assign({}, b);
         nb.id = String(nb.id);
@@ -215,7 +268,7 @@
         if (typeof state === 'undefined') return;
         if (!Array.isArray(state.buildings)) state.buildings = [];
         const byId = new Map(state.buildings.map(b => [String(b.id), b]));
-        list.forEach(b => byId.set(String(b.id), b));   // 있으면 갱신, 없으면 추가
+        list.forEach(b => byId.set(String(b.id), b));
         state.buildings = Array.from(byId.values());
     }
 
@@ -223,20 +276,18 @@
     // 초기화
     // =====================================================
     function init() {
-        console.info('[ai-search] 초기화 시작');
+        ensureStyles();
         ensureButton();
         updateButtonVisibility();
-        // #map-wrap 준비 지연 + 권한(로그인 정보/서버 권한) 로드 지연에 모두 대비:
-        // 버튼이 생기고 노출될 때까지 최대 ~8초간 재시도한다.
+        // #map-wrap 준비 지연 + 권한 로드 지연에 대비해 버튼이 노출될 때까지 재시도
         let tries = 0;
         const timer = setInterval(function () {
             tries++;
-            ensureButton();               // 아직 없으면 다시 주입 시도
-            updateButtonVisibility();     // 권한이 준비되면 노출로 전환
+            ensureStyles();
+            ensureButton();
+            updateButtonVisibility();
             const btn = document.getElementById('ai-search-float');
-            if ((btn && btn.style.display !== 'none') || tries >= 16) {
-                clearInterval(timer);
-            }
+            if ((btn && btn.style.display !== 'none') || tries >= 16) clearInterval(timer);
         }, 500);
     }
 
