@@ -919,6 +919,7 @@ function openCluster(key) {
 
 // 클러스터 안의 매물 목록 — 하단 메뉴 '목록'과 동일한 카드 스타일 재사용
 function showClusterList(items) {
+    hideSheetBack('sheet');
     document.getElementById('sheet-title').textContent = '이 위치의 매물';
     document.getElementById('sheet-subtitle').textContent = `${items.length}개 매물이 모여 있습니다`;
     const body = document.getElementById('sheet-body');
@@ -953,6 +954,134 @@ function getUnitStats(b) {
     };
 }
 
+// =====================================================
+// 웹(데스크톱) 상세 패널 — 네이버 지도 웹처럼 목록 패널 오른쪽에 같은 크기로 슬라이드인
+// =====================================================
+function isWebMode() {
+    return document.documentElement.classList.contains('mode-web');
+}
+
+// 상세 패널 + 헤더 '목록' 버튼용 스타일 자체 주입 (main.css 수정 불필요)
+function ensureWebDetailStyles() {
+    if (document.getElementById('web-detail-styles')) return;
+    const css = `
+/* 상세보기 헤더 맨 위(제목 위) '목록' 버튼 */
+.sheet-back-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    margin: 2px 0 10px; padding: 7px 12px;
+    border-radius: 8px; border: 1px solid var(--gray-200, #e5e7eb);
+    background: #fff; color: var(--gray-500, #6b7280);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.sheet-back-btn:hover { background: var(--gray-50, #f9fafb); color: var(--gray-700, #374151); }
+.sheet-back-btn:active { transform: scale(0.97); }
+
+/* 상세 패널 — 기본(모바일)에서는 사용 안 함 */
+#detail-panel { display: none; }
+
+/* 웹 모드에서만: 목록 패널(#bottom-sheet) 바로 오른쪽에 동일한 폭으로 배치 */
+html.mode-web #detail-panel {
+    display: flex; flex-direction: column;
+    position: absolute;
+    top: var(--web-header-h); bottom: 0;
+    left: calc(var(--web-rail-w) + var(--web-panel-w));   /* 목록 패널 바로 오른쪽 */
+    width: var(--web-panel-w); min-width: var(--web-panel-w); max-width: var(--web-panel-w);
+    background: var(--white, #fff);
+    border-right: 1px solid var(--gray-200, #e5e7eb);
+    box-shadow: 8px 0 24px rgba(17,24,39,0.06);
+    z-index: 190;                       /* 지도 위, 모달 아래 */
+    transform: translateX(-100%);       /* 목록 패널 뒤에 숨어 있다가 */
+    opacity: 0; pointer-events: none;
+    transition: transform 0.32s cubic-bezier(0.32,0.72,0,1), opacity 0.2s ease;
+}
+html.mode-web #detail-panel.open {
+    transform: translateX(0);           /* 오른쪽으로 슬라이드인 */
+    opacity: 1; pointer-events: auto;
+}
+/* 상세 패널이 열리면 지도 좌측 컨트롤을 패널 오른쪽으로 밀어 가리지 않게 */
+html.mode-web #app.web-detail-open .map-float-controls { left: calc(var(--web-panel-w) + 18px); }
+`;
+    const style = document.createElement('style');
+    style.id = 'web-detail-styles';
+    style.textContent = css;
+    (document.head || document.documentElement).appendChild(style);
+}
+
+// 상세 패널 DOM 1회 생성 (#bottom-sheet 와 동일한 구조/클래스로 스타일 일치)
+function ensureDetailPanel() {
+    let panel = document.getElementById('detail-panel');
+    if (panel) return panel;
+    const app = document.getElementById('app');
+    if (!app) return null;
+    panel = document.createElement('div');
+    panel.id = 'detail-panel';
+    panel.innerHTML = `
+      <div class="sheet-header" id="detail-header">
+        <div class="sheet-title" id="detail-title"></div>
+        <div class="sheet-subtitle" id="detail-subtitle"></div>
+      </div>
+      <div class="sheet-body" id="detail-body"></div>`;
+    app.appendChild(panel);
+    return panel;
+}
+
+// 헤더 맨 위(제목 위)에 '목록' 버튼을 넣는다. prefix: 'sheet'(모바일) | 'detail'(웹 패널)
+function ensureSheetBack(prefix, onClick) {
+    const header = document.getElementById(prefix + '-header');
+    if (!header) return;
+    let back = document.getElementById(prefix + '-back');
+    if (!back) {
+        back = document.createElement('button');
+        back.id = prefix + '-back';
+        back.type = 'button';
+        back.className = 'sheet-back-btn';
+        header.insertBefore(back, header.firstChild);   // 제목 위(헤더 맨 앞)에 배치
+    }
+    back.innerHTML = `${icon('back', 15)} 목록`;
+    back.onclick = onClick;
+    back.style.display = 'inline-flex';
+}
+function hideSheetBack(prefix) {
+    const back = document.getElementById((prefix || 'sheet') + '-back');
+    if (back) back.style.display = 'none';
+}
+
+// 웹: 오른쪽 상세 패널을 채우고 슬라이드인
+function openWebDetail(b) {
+    ensureWebDetailStyles();
+    ensureDetailPanel();
+    showBuildingDetail(b, 'detail');
+    const panel = document.getElementById('detail-panel');
+    if (panel) panel.classList.add('open');
+    const app = document.getElementById('app');
+    if (app) app.classList.add('web-detail-open');
+    const db = document.getElementById('detail-body');
+    if (db) db.scrollTop = 0;
+}
+function closeWebDetail() {
+    const panel = document.getElementById('detail-panel');
+    if (panel) panel.classList.remove('open');
+    const app = document.getElementById('app');
+    if (app) app.classList.remove('web-detail-open');
+    currentBuilding = null;
+}
+
+// 상세보기 진입 공통 — 웹은 오른쪽 패널, 모바일은 기존 바텀시트
+function openBuildingDetail(b) {
+    if (!b) return;
+    currentBuilding = b;
+    if (isWebMode()) {
+        openWebDetail(b);
+    } else {
+        showBuildingDetail(b);
+        showSheet('center');
+    }
+}
+
+// 로드 시 스타일 미리 주입(모바일 '목록' 버튼 스타일 포함)
+ensureWebDetailStyles();
+
 function selectBuilding(id) {
     if (!myPerms().canRead) { showToast('조회 권한이 없습니다'); return; }
     currentBuilding = state.buildings.find(b => b.id === id);
@@ -962,8 +1091,14 @@ function selectBuilding(id) {
         // 카카오 LatLng를 네이버 LatLng로 변경
         map.panTo(new naver.maps.LatLng(currentBuilding.lat, currentBuilding.lng));
     }
-    showBuildingDetail(currentBuilding);
-    showSheet('center');
+
+    if (isWebMode()) {
+        // 웹: 왼쪽 목록 패널은 그대로 두고, 오른쪽에 상세 패널을 슬라이드인 (네이버 지도 웹 스타일)
+        openWebDetail(currentBuilding);
+    } else {
+        showBuildingDetail(currentBuilding);
+        showSheet('center');
+    }
 }
 
 // =====================================================
@@ -1131,6 +1266,7 @@ function closeSheet() {
 }
 
 function showBuildingList() {
+    hideSheetBack('sheet');
     if (!myPerms().canRead) {
         document.getElementById('sheet-title').textContent = '조회 권한 없음';
         document.getElementById('sheet-subtitle').textContent = '관리자에게 조회 권한을 요청하세요';
@@ -1221,15 +1357,21 @@ async function hydrateOwnerNames(root) {
 }
 // [E] edit by smsong
 
-function showBuildingDetail(b) {
+function showBuildingDetail(b, target) {
     const s = getUnitStats(b);
     const totalRent = b.units.filter(u => u.status === 'occupied').reduce((sum, u) => sum + (u.rent || 0), 0);
     const totalDeposit = b.units.filter(u => u.status !== 'empty').reduce((sum, u) => sum + (u.deposit || 0), 0);
 
-    document.getElementById('sheet-title').textContent = b.name;
-    document.getElementById('sheet-subtitle').textContent = (b.address || '');
+    // 렌더 대상: 'detail'=웹 오른쪽 패널 / 그 외='sheet'(모바일 바텀시트, 기존 동작)
+    const P = (target === 'detail') ? 'detail' : 'sheet';
 
-    const body = document.getElementById('sheet-body');
+    // 제목 위(헤더 맨 앞)에 '목록' 버튼 — 웹은 상세 패널 닫기, 모바일은 목록으로
+    ensureSheetBack(P, (P === 'detail') ? closeWebDetail : function () { switchTab('list'); });
+
+    document.getElementById(P + '-title').textContent = b.name;
+    document.getElementById(P + '-subtitle').textContent = (b.address || '');
+
+    const body = document.getElementById(P + '-body');
     body.innerHTML = `
     ${renderGallery(b)}
     <!-- 매물 등록자 + 공인중개사사무소 통합 카드 (비동기 채움) -->
@@ -1249,7 +1391,6 @@ function showBuildingDetail(b) {
       ` : `
       <div style="display:inline-flex;align-items:center;gap:5px;padding:7px 12px;border-radius:8px;background:#f3f4f6;color:#6b7280;font-size:12.5px;font-weight:600;">${icon('lock',14)} ${ownerNameSpan(b)}님의 매물 · 조회 전용</div>
       `}
-      <button onclick="switchTab('list')" style="display:inline-flex;align-items:center;gap:4px;padding:7px 14px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:600;color:#6b7280;cursor:pointer;">${icon('back',15)} 목록</button>
     </div>
 
     <!-- 주소(풀주소·지번 포함) + 건물 유형 -->
@@ -1453,6 +1594,7 @@ function startAddBuilding() {
     document.getElementById('app').classList.add('picker-active'); // 상단바 숨기고 검색창을 그 자리에
     document.getElementById('app').classList.remove('chrome-hidden'); // 항상 검색/안내바 보이는 상태로 시작
     Sheet.hardClose();                    // 위치 설정 중엔 시트를 완전히 내려 지도를 비움
+    hideSheetBack('sheet');
     document.getElementById('sheet-body').innerHTML = `<div class="empty-state"><div class="empty-state-icon">${icon('pin',56,'color:#9ca3af;')}</div><div class="empty-state-title">지도를 이동하여 위치 설정</div><div class="empty-state-sub">건물 위치를 지도 위에서 직접 설정하세요</div></div>`;
 }
 
@@ -2091,7 +2233,7 @@ async function saveUnit(buildingId, unitId) {
         closeModal();
         renderMarkers();
         updateStats();
-        if (b) { showBuildingDetail(b); showSheet('center'); currentBuilding = b; }
+        if (b) { openBuildingDetail(b); }
         showToast(unitId ? '호실 정보가 수정되었습니다' : '호실이 추가되었습니다');
     } catch (e) {
         showToast('저장 실패: ' + e.message);
@@ -2114,7 +2256,7 @@ async function deleteUnit(buildingId, unitId) {
         closeModal();
         renderMarkers();
         updateStats();
-        if (b) { showBuildingDetail(b); currentBuilding = b; }
+        if (b) { openBuildingDetail(b); }
         showToast('호실이 삭제되었습니다');
     } catch (e) {
         showToast('삭제 실패: ' + e.message);
@@ -2129,6 +2271,7 @@ async function deleteUnit(buildingId, unitId) {
 let _tenants = [];   // 계약자 목록 캐시
 
 function showStatsView() {   // (하단 '관리자' 탭 진입점 — 기존 호출부 호환 위해 이름 유지)
+    hideSheetBack('sheet');
     const body = document.getElementById('sheet-body');
     document.getElementById('sheet-title').textContent = '계약자 · 고객 관리';
     document.getElementById('sheet-subtitle').textContent = '중개사 전용 · 계약자(임차인)와 고객(리드) 관리';
@@ -2482,6 +2625,7 @@ async function deleteCustomer(id) {
 }
 
 function showSettingsView() {
+    hideSheetBack('sheet');
     document.getElementById('sheet-title').textContent = '내 프로필';
     document.getElementById('sheet-subtitle').textContent = '로그인한 계정 정보';
 
@@ -2920,6 +3064,7 @@ function markTab(tab) {
 
 function switchTab(tab) {
     if (pickerMode) cancelMapPicker();   // 다른 탭으로 가면 위치 설정 모드 해제
+    if (isWebMode()) closeWebDetail();   // 웹: 탭 이동 시 오른쪽 상세 패널 닫기
     applyPermUI();                       // 권한에 따라 추가 버튼 표시/숨김
 
     if (tab === 'map') {
