@@ -30,7 +30,7 @@
     function ensureButton() {
         if (document.getElementById('ai-search-float')) return;
         const mapWrap = document.getElementById('map-wrap');
-        if (!mapWrap) return;
+        if (!mapWrap) { console.warn('[ai-search] #map-wrap 를 찾지 못함 — 버튼 주입 보류'); return; }
         const btn = document.createElement('button');
         btn.id = 'ai-search-float';
         btn.title = 'AI 매물 검색';
@@ -47,12 +47,23 @@
         updateButtonVisibility();
     }
 
+    // 관리자 여부 — uid 를 문자열로 강제 비교(숫자로 저장돼 있어도 통과)
+    function isAdmin() {
+        try {
+            const u = (typeof getCurrentUser === 'function') ? getCurrentUser() : null;
+            const adminUid = (typeof ADMIN_UID !== 'undefined') ? ADMIN_UID : '4979532269';
+            return !!(u && String(u.uid) === String(adminUid));
+        } catch (_) { return false; }
+    }
+
     // 중개인/관리자에게만 노출 (권한 미로딩 시엔 isBroker 의 임시 판정을 따름)
     function updateButtonVisibility() {
         const btn = document.getElementById('ai-search-float');
-        if (!btn) return;
-        const show = (typeof isBroker === 'function') ? isBroker() : false;
+        if (!btn) { console.warn('[ai-search] 버튼이 아직 없음 (map-wrap 미준비)'); return; }
+        const broker = (typeof isBroker === 'function') ? isBroker() : false;
+        const show = isAdmin() || broker;
         btn.style.display = show ? '' : 'none';
+        if (!show) console.info('[ai-search] 버튼 숨김 — isAdmin=%s, isBroker=%s', isAdmin(), broker);
     }
 
     // main.js 의 applyPermUI 생명주기에 편승해 버튼 노출을 갱신
@@ -212,11 +223,21 @@
     // 초기화
     // =====================================================
     function init() {
+        console.info('[ai-search] 초기화 시작');
         ensureButton();
         updateButtonVisibility();
-        // 권한 로드가 조금 늦게 끝나는 경우 대비해 몇 번 더 재확인
-        setTimeout(updateButtonVisibility, 800);
-        setTimeout(updateButtonVisibility, 2000);
+        // #map-wrap 준비 지연 + 권한(로그인 정보/서버 권한) 로드 지연에 모두 대비:
+        // 버튼이 생기고 노출될 때까지 최대 ~8초간 재시도한다.
+        let tries = 0;
+        const timer = setInterval(function () {
+            tries++;
+            ensureButton();               // 아직 없으면 다시 주입 시도
+            updateButtonVisibility();     // 권한이 준비되면 노출로 전환
+            const btn = document.getElementById('ai-search-float');
+            if ((btn && btn.style.display !== 'none') || tries >= 16) {
+                clearInterval(timer);
+            }
+        }, 500);
     }
 
     if (document.readyState === 'loading') {
