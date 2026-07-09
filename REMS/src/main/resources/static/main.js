@@ -2748,8 +2748,8 @@ function showTenantDetail(id) {
     `;
     document.getElementById('modal-footer').innerHTML = `
       <div style="display:flex;gap:8px;width:100%;">
-        <button class="btn-secondary" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;" onclick="openTenantForm('${t.id}')">${icon('edit', 15)} 편집</button>
-        ${myPerms().canDelete ? `<button class="btn-danger" style="flex:1;" onclick="deleteTenant('${t.id}')">삭제</button>` : ''}
+        <button class="btn-secondary" style="flex:1;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:5px;" onclick="openTenantForm('${t.id}')">${icon('edit', 15)} 편집</button>
+        ${myPerms().canDelete ? `<button class="btn-danger" style="flex:1;white-space:nowrap;" onclick="deleteTenant('${t.id}')">삭제</button>` : ''}
       </div>
     `;
     showModal();
@@ -2944,9 +2944,9 @@ function showCustomerDetail(id) {
     `;
     document.getElementById('modal-footer').innerHTML = `
       <div style="display:flex;gap:8px;width:100%;">
-        <button class="btn-secondary" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;" onclick="openCustomerForm('${c.id}')">${icon('edit', 15)} 편집</button>
-        ${myPerms().canDelete ? `<button class="btn-danger" style="flex:1;" onclick="deleteCustomer('${c.id}')">삭제</button>` : ''}
-        <button class="btn-primary" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:4px;" onclick="openCustomerBuildingPicker('${c.id}')">${icon('plus', 14)} 매물 추가</button>
+        <button class="btn-secondary" style="flex:1;min-width:0;white-space:nowrap;padding-left:8px;padding-right:8px;display:inline-flex;align-items:center;justify-content:center;gap:5px;" onclick="openCustomerForm('${c.id}')">${icon('edit', 15)} 편집</button>
+        ${myPerms().canDelete ? `<button class="btn-danger" style="flex:1;min-width:0;white-space:nowrap;padding-left:8px;padding-right:8px;" onclick="deleteCustomer('${c.id}')">삭제</button>` : ''}
+        <button class="btn-primary" style="flex:1;min-width:0;white-space:nowrap;padding-left:8px;padding-right:8px;display:inline-flex;align-items:center;justify-content:center;gap:4px;" onclick="openCustomerBuildingPicker('${c.id}')">${icon('plus', 14)} 매물 추가</button>
       </div>
     `;
     showModal();
