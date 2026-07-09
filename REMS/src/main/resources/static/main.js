@@ -732,7 +732,7 @@ async function initMap() {
     // 현재 위치 추적 시작(파란 점). iOS가 아니면 나침반도 바로 연결
     startGeolocationTracking();
     if (!(typeof DeviceOrientationEvent !== 'undefined' &&
-        typeof DeviceOrientationEvent.requestPermission === 'function')) {
+          typeof DeviceOrientationEvent.requestPermission === 'function')) {
         ensureOrientationPermission();
     }
 
@@ -758,13 +758,13 @@ function gotoMyLocation() {
 function centerOnCurrentLocationOnce() {
     if (!navigator.geolocation || !map) return;
     navigator.geolocation.getCurrentPosition(pos => {
-            if (_suppressAutoCenter) return;     // 그 사이 사용자가 지도를 조작했으면 중단
-            const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
-            updateGeoMarker(latlng, pos.coords.heading);
-            map.setCenter(latlng);
-            map.setZoom(16);
-        }, () => { /* 거부/실패 → 기본 서울 중심 유지 */ },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+        if (_suppressAutoCenter) return;     // 그 사이 사용자가 지도를 조작했으면 중단
+        const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+        updateGeoMarker(latlng, pos.coords.heading);
+        map.setCenter(latlng);
+        map.setZoom(16);
+    }, () => { /* 거부/실패 → 기본 서울 중심 유지 */ },
+       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
 }
 
 // =====================================================
@@ -1689,7 +1689,7 @@ function agencySectionHTML(p) {
       <div class="oa-row">
         <span class="oa-row-ic">${icon(ic, 15)}</span>
         ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g, ''))}" class="oa-tel">${escapeHtml(val)}</a>`
-        : `<span>${escapeHtml(val)}</span>`}
+            : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
       <div class="oa-agency">
@@ -1709,7 +1709,7 @@ function agencyCardHTML(p) {
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;">
         <span style="color:#1a56db;display:inline-flex;">${icon(ic, 15)}</span>
         ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g,''))}" style="color:#1a56db;text-decoration:none;font-weight:600;">${escapeHtml(val)}</a>`
-        : `<span>${escapeHtml(val)}</span>`}
+                : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
       <div style="margin-bottom:12px;padding:12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;text-align:left;">
@@ -1840,6 +1840,14 @@ function renderGalleryBlock(arr, gid, safeName, title) {
     </div>`;
 }
 
+// 단일 세그먼트(탭 1개) — 탭이 있는 갤러리와 동일한 스타일. 전환은 없음.
+function singleSeg(label) {
+    return `<div class="seg" style="--seg-n:1;--seg-i:0;">
+      <span class="seg-ind"></span>
+      <button type="button" class="seg-btn active" style="cursor:default;">${label}</button>
+    </div>`;
+}
+
 // 건물 상세 이미지 — '호실 사진' / '공실표' 탭 전환 (둘 다 있을 때만 탭, 하나면 그대로)
 function renderGallery(b) {
     const base = (b && b.id ? b.id : Math.random().toString(36).slice(2));
@@ -1851,12 +1859,18 @@ function renderGallery(b) {
 
     if (!hasUnit && !hasVac) return '';
 
-    // 한쪽만 있으면 탭 없이 라벨만
+    // 한쪽만 있으면 동일한 세그먼트 스타일의 단일 탭(전환 없음)으로 표시
     if (hasUnit && !hasVac) {
-        return `<div style="margin-bottom:4px;">${renderGalleryBlock(b.mediaURLs, 'galu-' + base, safeName, '호실 사진')}</div>`;
+        return `<div style="margin-bottom:4px;">
+      ${singleSeg('호실 사진')}
+      ${renderGalleryBlock(b.mediaURLs, 'galu-' + base, safeName, null)}
+    </div>`;
     }
     if (!hasUnit && hasVac) {
-        return `<div style="margin-bottom:4px;">${renderGalleryBlock(b.vacancyURLs, 'galv-' + base, safeName, '공실표')}</div>`;
+        return `<div style="margin-bottom:4px;">
+      ${singleSeg('공실표')}
+      ${renderGalleryBlock(b.vacancyURLs, 'galv-' + base, safeName, null)}
+    </div>`;
     }
 
     // 둘 다 있으면 세그먼트 탭으로 전환
