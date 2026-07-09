@@ -70,11 +70,13 @@ public class ClovaSpeechService {
 
         ByteArrayResource fileResource;
         try {
-            final String filename = (audio.getOriginalFilename() != null && !audio.getOriginalFilename().isBlank())
-                    ? audio.getOriginalFilename() : "call-audio";
+            String original = audio.getOriginalFilename();
+            final String filename = ensureAudioFilename(original, audio.getContentType());
             fileResource = new ByteArrayResource(audio.getBytes()) {
                 @Override public String getFilename() { return filename; }
             };
+            logger.info("STT 업로드 - filename={}, contentType={}, size={}KB",
+                    filename, audio.getContentType(), audio.getSize() / 1024);
         } catch (IOException e) {
             throw new RuntimeException("오디오 파일을 읽지 못했습니다: " + e.getMessage(), e);
         }
@@ -88,6 +90,12 @@ public class ClovaSpeechService {
         try {
             ResponseEntity<String> resp = restTemplate.postForEntity(url, request, String.class);
             return parse(resp.getBody());
+        } catch (org.springframework.web.client.RestClientResponseException e) {
+            // CLOVA 가 4xx/5xx 로 응답한 경우 — 실제 원인(쿼터/인증/도메인 등)이 본문에 담겨 옴
+            logger.error("CLOVA Speech HTTP 오류 - status={}, body={}",
+                    e.getStatusCode(), truncate(e.getResponseBodyAsString(), 1500));
+            throw new RuntimeException("음성 인식(STT) 요청이 거부되었습니다 (HTTP "
+                    + e.getStatusCode().value() + "). CLOVA 도메인/시크릿/사용량을 확인해주세요.", e);
         } catch (Exception e) {
             logger.error("CLOVA Speech 호출 실패", e);
             throw new RuntimeException("음성 인식(STT)에 실패했습니다: " + e.getMessage(), e);
@@ -112,12 +120,43 @@ public class ClovaSpeechService {
 
             String diarized = sb.length() > 0 ? sb.toString().trim() : fullText;
             if (diarized.isBlank()) {
-                throw new RuntimeException("인식된 음성이 없습니다. 녹음 파일을 확인해주세요.");
+                // CLOVA 가 200 을 주면서도 인식 결과가 없을 때 — 실제 원인(쿼터/포맷/무음 등)을
+                // 알 수 있도록 CLOVA 응답의 상태/메시지와 원문 일부를 로그로 남긴다.
+                String result = root.path("result").asText("");
+                String message = root.path("message").asText("");
+                logger.warn("CLOVA 인식 텍스트 없음 - result='{}', message='{}', 응답원문(일부)={}",
+                        result, message, truncate(responseBody, 1500));
+                String detail = (!result.isBlank() || !message.isBlank())
+                        ? " (CLOVA: " + result + (message.isBlank() ? "" : " / " + message) + ")"
+                        : "";
+                throw new RuntimeException("인식된 음성이 없습니다. 녹음 파일을 확인해주세요." + detail);
             }
             logger.info("STT 완료 — 길이 {}자", diarized.length());
             return new SttResult(fullText, diarized);
         } catch (Exception e) {
             throw new RuntimeException("STT 응답 파싱 실패: " + e.getMessage(), e);
         }
+    }
+
+    // 파일명에 오디오 확장자가 없으면 contentType 으로 보정 (CLOVA 가 확장자로 포맷을 판별함)
+    private String ensureAudioFilename(String original, String contentType) {
+        String name = (original != null && !original.isBlank()) ? original : "call-audio";
+        if (name.matches("(?i).*\\.(m4a|mp3|wav|amr|aac|ogg|flac|mp4)$")) return name;
+        String ext = ".m4a";
+        if (contentType != null) {
+            String ct = contentType.toLowerCase();
+            if (ct.contains("mpeg") || ct.contains("mp3")) ext = ".mp3";
+            else if (ct.contains("wav")) ext = ".wav";
+            else if (ct.contains("ogg")) ext = ".ogg";
+            else if (ct.contains("aac")) ext = ".aac";
+            else if (ct.contains("amr")) ext = ".amr";
+            else if (ct.contains("mp4") || ct.contains("m4a") || ct.contains("aac")) ext = ".m4a";
+        }
+        return name + ext;
+    }
+
+    private String truncate(String s, int max) {
+        if (s == null) return "";
+        return s.length() <= max ? s : s.substring(0, max) + "…(총 " + s.length() + "자)";
     }
 }
