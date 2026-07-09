@@ -19,7 +19,10 @@ async function handleResponse(res) {
             redirectToLogin('세션이 만료되었습니다. 다시 로그인해주세요.');
             throw new Error('인증이 만료되었습니다');
         }
-        throw new Error(text || (res.status + ' ' + res.statusText));
+        // JSON 에러 본문이면 message/error 필드만 추출해 깔끔한 메시지로
+        let msg = text;
+        try { const j = JSON.parse(text); if (j && (j.message || j.error)) msg = j.message || j.error; } catch (_) { }
+        throw new Error(msg || (res.status + ' ' + res.statusText));
     }
     if (res.status === 204) return null;
     return res.json();

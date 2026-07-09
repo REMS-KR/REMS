@@ -201,7 +201,7 @@
             }
         } catch (e) {
             hideLoading();
-            showToast('분석 실패: ' + (e.message || e));
+            alert('통화 분석에 실패했습니다.\n\n' + (e.message || e));
         }
     };
 
@@ -272,7 +272,7 @@
             }
         } catch (e) {
             hideLoading();
-            showToast('분석 실패: ' + (e.message || e));
+            alert('통화 분석에 실패했습니다.\n\n' + (e.message || e));
         }
     };
 
