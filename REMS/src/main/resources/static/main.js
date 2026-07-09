@@ -379,28 +379,30 @@ function ensureFavStyles() {
 .fav-btn.on { color: #ef4444; border-color: #fecaca; background: #fef2f2; }
 .fav-btn.fav-detail { width: auto; height: auto; padding: 7px 12px; font-size: 13px; font-weight: 700; }
 .fav-btn .fav-label { line-height: 1; }
-/* 상세 갤러리 세그먼트 탭 (호실 사진 / 공실표) — 흰 박스가 좌우로 슬라이드 */
-.gal-tabs {
-    position: relative; display: flex; padding: 4px; margin: 0 0 10px;
+/* 공용 세그먼트 탭 — 흰 인디케이터가 부드럽게 미끄러짐 (N개 지원: --seg-n 개수 / --seg-i 활성 index) */
+.seg {
+    position: relative; display: flex; padding: 4px; margin: 0 0 12px;
     background: var(--gray-100, #f3f4f6); border-radius: 10px;
 }
-.gal-tab-indicator {
+.seg-ind {
     position: absolute; top: 4px; bottom: 4px; left: 4px;
-    width: calc(50% - 4px);
+    width: calc((100% - 8px) / var(--seg-n, 2));
+    transform: translateX(calc(var(--seg-i, 0) * 100%));
     background: #fff; border-radius: 7px;
-    box-shadow: 0 1px 3px rgba(17,24,39,0.12);
-    transform: translateX(0);
-    transition: transform .32s cubic-bezier(0.32,0.72,0,1);
+    box-shadow: 0 1px 4px rgba(17,24,39,0.12), 0 0 1px rgba(17,24,39,0.06);
+    transition: transform .5s cubic-bezier(0.22, 1, 0.36, 1);   /* 길고 부드러운 글라이드 */
     z-index: 0; pointer-events: none;
 }
-.gal-tabs[data-active="v"] .gal-tab-indicator { transform: translateX(100%); }
-.gal-tab {
-    position: relative; z-index: 1; flex: 1; padding: 7px 10px;
-    border: none; background: transparent; border-radius: 7px; cursor: pointer;
+.seg-btn {
+    position: relative; z-index: 1; flex: 1;
+    padding: 8px 10px; border: none; background: transparent; border-radius: 7px;
+    cursor: pointer; font-family: inherit;
     font-size: 12.5px; font-weight: 700; color: var(--gray-500, #6b7280);
-    letter-spacing: -0.2px; transition: color .2s ease;
+    letter-spacing: -0.2px; white-space: nowrap;
+    transition: color .3s ease;
 }
-.gal-tab.active { color: #1a56db; }
+.seg-btn.active { color: #1a56db; }
+.seg-btn:active { transform: scale(0.98); }
 `;
     const style = document.createElement('style');
     style.id = 'fav-styles';
@@ -408,6 +410,14 @@ function ensureFavStyles() {
     (document.head || document.documentElement).appendChild(style);
 }
 ensureFavStyles();
+
+// 공용 세그먼트 탭 인디케이터 이동 (id=컨테이너(.seg), idx=활성 index)
+function segMove(id, idx) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.setProperty('--seg-i', idx);
+    el.querySelectorAll('.seg-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+}
 
 // HTML/속성 이스케이프 (이름에 <, ", & 등이 들어가도 마크업이 깨지지 않게)
 function escapeHtml(s) {
@@ -1853,10 +1863,10 @@ function renderGallery(b) {
     const unitBlock = renderGalleryBlock(b.mediaURLs, 'galu-' + base, safeName, null);
     const vacBlock = renderGalleryBlock(b.vacancyURLs, 'galv-' + base, safeName, null);
     return `<div style="margin-bottom:4px;">
-      <div class="gal-tabs" id="galtabs-${base}" data-active="u">
-        <span class="gal-tab-indicator"></span>
-        <button type="button" id="galtab-${base}-u" class="gal-tab active" onclick="switchGalleryTab('${base}','u',event)">호실 사진</button>
-        <button type="button" id="galtab-${base}-v" class="gal-tab" onclick="switchGalleryTab('${base}','v',event)">공실표</button>
+      <div class="seg" id="galtabs-${base}" style="--seg-n:2;--seg-i:0;">
+        <span class="seg-ind"></span>
+        <button type="button" class="seg-btn active" onclick="switchGalleryTab('${base}','u',event)">호실 사진</button>
+        <button type="button" class="seg-btn" onclick="switchGalleryTab('${base}','v',event)">공실표</button>
       </div>
       <div id="galwrap-${base}-u">${unitBlock}</div>
       <div id="galwrap-${base}-v" style="display:none;">${vacBlock}</div>
@@ -1869,14 +1879,9 @@ function switchGalleryTab(base, which, ev) {
     const showU = which === 'u';
     const wrapU = document.getElementById('galwrap-' + base + '-u');
     const wrapV = document.getElementById('galwrap-' + base + '-v');
-    const tabU = document.getElementById('galtab-' + base + '-u');
-    const tabV = document.getElementById('galtab-' + base + '-v');
     if (wrapU) wrapU.style.display = showU ? '' : 'none';
     if (wrapV) wrapV.style.display = showU ? 'none' : '';
-    if (tabU) tabU.classList.toggle('active', showU);
-    if (tabV) tabV.classList.toggle('active', !showU);
-    const tabs = document.getElementById('galtabs-' + base);
-    if (tabs) tabs.dataset.active = which;   // 흰 인디케이터를 좌우로 슬라이드
+    segMove('galtabs-' + base, showU ? 0 : 1);   // 흰 인디케이터를 부드럽게 이동
     // 숨김 상태에선 clientWidth=0이라 높이가 안 잡혔을 수 있음 → 보이게 된 쪽 높이 재계산
     const gid = showU ? ('galu-' + base) : ('galv-' + base);
     const track = document.getElementById(gid);
@@ -2546,10 +2551,12 @@ function showStatsView() {   // (하단 '관리자' 탭 진입점 — 기존 호
     }
 
     const sub = _statsSubTab || 'tenant';
-    const seg = (key, label) => `<button onclick="switchStatsSubTab('${key}')" style="flex:1;padding:9px 0;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;${sub === key ? 'background:#1a56db;color:#fff;' : 'background:transparent;color:#6b7280;'}">${label}</button>`;
+    const idx = sub === 'customer' ? 1 : 0;
     body.innerHTML = `
-      <div style="display:flex;gap:4px;background:#f3f4f6;border-radius:10px;padding:4px;margin-bottom:12px;">
-        ${seg('tenant', '계약자 관리')}${seg('customer', '고객 관리')}
+      <div class="seg" id="stats-seg" style="--seg-n:2;--seg-i:${idx};">
+        <span class="seg-ind"></span>
+        <button type="button" class="seg-btn${idx === 0 ? ' active' : ''}" onclick="switchStatsSubTab('tenant')">계약자 관리</button>
+        <button type="button" class="seg-btn${idx === 1 ? ' active' : ''}" onclick="switchStatsSubTab('customer')">고객 관리</button>
       </div>
       <div id="stats-sub-body"></div>
     `;
@@ -2558,8 +2565,13 @@ function showStatsView() {   // (하단 '관리자' 탭 진입점 — 기존 호
 }
 
 function switchStatsSubTab(which) {
+    if (_statsSubTab === which) return;
     _statsSubTab = which;
-    showStatsView();
+    segMove('stats-seg', which === 'customer' ? 1 : 0);   // 인디케이터 슬라이드
+    const box = document.getElementById('stats-sub-body');
+    if (!box) { showStatsView(); return; }                // 세그가 아직 없으면 전체 렌더
+    if (which === 'customer') renderCustomerSub();
+    else renderTenantSub();
 }
 
 function renderTenantSub() {
