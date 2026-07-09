@@ -40,7 +40,8 @@ public class GcpSpeechService {
 
     private static final Logger logger = LoggerFactory.getLogger(GcpSpeechService.class);
 
-    @Value("${gcp.speech.bucket}")
+    // 기존 yml 의 google.cloud.storage.bucket 을 그대로 재사용
+    @Value("${google.cloud.storage.bucket}")
     private String bucket;
 
     @Value("${gcp.speech.language:ko-KR}")
