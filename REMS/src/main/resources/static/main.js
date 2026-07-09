@@ -2621,8 +2621,8 @@ let _tenants = [];   // 계약자 목록 캐시
 function showStatsView() {   // (하단 '관리자' 탭 진입점 — 기존 호출부 호환 위해 이름 유지)
     hideSheetBack('sheet');
     const body = document.getElementById('sheet-body');
-    document.getElementById('sheet-title').textContent = '계약자 · 고객 관리';
-    document.getElementById('sheet-subtitle').textContent = '중개사 전용 · 계약자(임차인)와 고객(리드) 관리';
+    document.getElementById('sheet-title').textContent = '계약자(임차인) · 고객 관리';
+    document.getElementById('sheet-subtitle').textContent = '중개사 전용 메뉴로 계약자(임차인)와 고객을 한 번에 관리하세요';
 
     if (!isBroker()) {
         body.innerHTML = `<div class="empty-state">
