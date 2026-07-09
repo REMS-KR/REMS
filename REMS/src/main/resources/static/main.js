@@ -2622,7 +2622,7 @@ function showStatsView() {   // (하단 '관리자' 탭 진입점 — 기존 호
     hideSheetBack('sheet');
     const body = document.getElementById('sheet-body');
     document.getElementById('sheet-title').textContent = '계약자(임차인) · 고객 관리';
-    document.getElementById('sheet-subtitle').textContent = '중개사 전용 메뉴로 고객과 임차인을 한 곳에서 관리하세요';
+    document.getElementById('sheet-subtitle').textContent = '상담 고객과 임차인 정보를 통합 관리하세요';
 
     if (!isBroker()) {
         body.innerHTML = `<div class="empty-state">
