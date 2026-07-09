@@ -379,20 +379,28 @@ function ensureFavStyles() {
 .fav-btn.on { color: #ef4444; border-color: #fecaca; background: #fef2f2; }
 .fav-btn.fav-detail { width: auto; height: auto; padding: 7px 12px; font-size: 13px; font-weight: 700; }
 .fav-btn .fav-label { line-height: 1; }
-/* 상세 갤러리 세그먼트 탭 (호실 사진 / 공실표) — 작고 가로로 꽉 찬 iOS 스타일 */
+/* 상세 갤러리 세그먼트 탭 (호실 사진 / 공실표) — 흰 박스가 좌우로 슬라이드 */
 .gal-tabs {
-    display: flex; gap: 4px; padding: 4px; margin: 0 0 10px;
+    position: relative; display: flex; padding: 4px; margin: 0 0 10px;
     background: var(--gray-100, #f3f4f6); border-radius: 10px;
 }
-.gal-tab {
-    flex: 1; padding: 7px 10px; border: none; background: transparent;
-    border-radius: 7px; cursor: pointer;
-    font-size: 12.5px; font-weight: 700; color: var(--gray-500, #6b7280);
-    letter-spacing: -0.2px;
-    transition: background .15s, color .15s, box-shadow .15s;
+.gal-tab-indicator {
+    position: absolute; top: 4px; bottom: 4px; left: 4px;
+    width: calc(50% - 4px);
+    background: #fff; border-radius: 7px;
+    box-shadow: 0 1px 3px rgba(17,24,39,0.12);
+    transform: translateX(0);
+    transition: transform .32s cubic-bezier(0.32,0.72,0,1);
+    z-index: 0; pointer-events: none;
 }
-.gal-tab.active { background: #fff; color: #1a56db; box-shadow: 0 1px 3px rgba(17,24,39,0.10); }
-.gal-tab:active { transform: scale(0.98); }
+.gal-tabs[data-active="v"] .gal-tab-indicator { transform: translateX(100%); }
+.gal-tab {
+    position: relative; z-index: 1; flex: 1; padding: 7px 10px;
+    border: none; background: transparent; border-radius: 7px; cursor: pointer;
+    font-size: 12.5px; font-weight: 700; color: var(--gray-500, #6b7280);
+    letter-spacing: -0.2px; transition: color .2s ease;
+}
+.gal-tab.active { color: #1a56db; }
 `;
     const style = document.createElement('style');
     style.id = 'fav-styles';
@@ -1845,7 +1853,8 @@ function renderGallery(b) {
     const unitBlock = renderGalleryBlock(b.mediaURLs, 'galu-' + base, safeName, null);
     const vacBlock = renderGalleryBlock(b.vacancyURLs, 'galv-' + base, safeName, null);
     return `<div style="margin-bottom:4px;">
-      <div class="gal-tabs">
+      <div class="gal-tabs" id="galtabs-${base}" data-active="u">
+        <span class="gal-tab-indicator"></span>
         <button type="button" id="galtab-${base}-u" class="gal-tab active" onclick="switchGalleryTab('${base}','u',event)">호실 사진</button>
         <button type="button" id="galtab-${base}-v" class="gal-tab" onclick="switchGalleryTab('${base}','v',event)">공실표</button>
       </div>
@@ -1866,6 +1875,8 @@ function switchGalleryTab(base, which, ev) {
     if (wrapV) wrapV.style.display = showU ? 'none' : '';
     if (tabU) tabU.classList.toggle('active', showU);
     if (tabV) tabV.classList.toggle('active', !showU);
+    const tabs = document.getElementById('galtabs-' + base);
+    if (tabs) tabs.dataset.active = which;   // 흰 인디케이터를 좌우로 슬라이드
     // 숨김 상태에선 clientWidth=0이라 높이가 안 잡혔을 수 있음 → 보이게 된 쪽 높이 재계산
     const gid = showU ? ('galu-' + base) : ('galv-' + base);
     const track = document.getElementById(gid);
