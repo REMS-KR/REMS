@@ -97,6 +97,33 @@
         document.head.appendChild(el);
     }
 
+    // ---- 녹음(오디오) 파일만 허용 ---------------------------------
+    const CP_AUDIO_EXT = ['m4a', 'mp3', 'wav', 'aac', 'amr', 'ogg', 'flac', 'mp4', '3gp', '3gpp', 'opus', 'wma', 'webm'];
+    function isAllowedAudioFile(file) {
+        if (!file) return false;
+        const name = (file.name || '').toLowerCase();
+        const dot = name.lastIndexOf('.');
+        const ext = dot >= 0 ? name.slice(dot + 1) : '';
+        if (CP_AUDIO_EXT.includes(ext)) return true;             // 허용 확장자
+        if (file.type && file.type.toLowerCase().startsWith('audio/')) return true;  // 오디오 MIME 안전망
+        return false;
+    }
+    // 파일 선택 처리 — 오디오가 아니면 선택 취소하고 안내
+    function handleAudioPick(e, fnameId) {
+        const file = (e.target.files && e.target.files[0]) ? e.target.files[0] : null;
+        if (file && !isAllowedAudioFile(file)) {
+            showToast('녹음 파일(m4a·mp3·wav·aac·amr·ogg·flac 등)만 올릴 수 있습니다');
+            e.target.value = '';
+            _pickedFile = null;
+            const fn = document.getElementById(fnameId);
+            if (fn) fn.textContent = '';
+            return;
+        }
+        _pickedFile = file;
+        const fn = document.getElementById(fnameId);
+        if (fn) fn.textContent = _pickedFile ? _pickedFile.name : '';
+    }
+
     // ---- 0) 유형 선택 모달 (계약자 / 고객) ------------------------
     window.openCallParseModal = function () {
         // 생성 권한자(중개인/관리자)만 사용
@@ -143,7 +170,7 @@
         <div>여기를 눌러 녹음 파일 선택</div>
         <div class="cp-fname" id="cp-fname"></div>
       </div>
-      <input id="cp-file" type="file" accept="audio/*,.m4a,.mp3,.wav,.amr,.aac,.ogg" style="display:none">
+      <input id="cp-file" type="file" accept="audio/*,.m4a,.mp3,.wav,.aac,.amr,.ogg,.flac,.3gp,.opus" style="display:none">
     `;
         document.getElementById('modal-footer').innerHTML = `
       <button class="btn-secondary" onclick="openCallParseModal()">뒤로</button>
@@ -151,9 +178,7 @@
     `;
 
         document.getElementById('cp-file').addEventListener('change', (e) => {
-            _pickedFile = e.target.files && e.target.files[0] ? e.target.files[0] : null;
-            const fn = document.getElementById('cp-fname');
-            if (fn) fn.textContent = _pickedFile ? _pickedFile.name : '';
+            handleAudioPick(e, 'cp-fname');
         });
 
         showModal();
@@ -218,16 +243,14 @@
         <div>여기를 눌러 녹음 파일 선택</div>
         <div class="cp-fname" id="cpc-fname"></div>
       </div>
-      <input id="cpc-file" type="file" accept="audio/*,.m4a,.mp3,.wav,.amr,.aac,.ogg" style="display:none">
+      <input id="cpc-file" type="file" accept="audio/*,.m4a,.mp3,.wav,.aac,.amr,.ogg,.flac,.3gp,.opus" style="display:none">
     `;
         document.getElementById('modal-footer').innerHTML = `
       <button class="btn-secondary" onclick="openCallParseModal()">뒤로</button>
       <button class="btn-primary" onclick="startCustomerParse()">분석 시작</button>
     `;
         document.getElementById('cpc-file').addEventListener('change', (e) => {
-            _pickedFile = e.target.files && e.target.files[0] ? e.target.files[0] : null;
-            const fn = document.getElementById('cpc-fname');
-            if (fn) fn.textContent = _pickedFile ? _pickedFile.name : '';
+            handleAudioPick(e, 'cpc-fname');
         });
         showModal();
     };
