@@ -18,8 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
  *  - parseCallCustomer() : 고객(리드) 초안
  *  DB에 저장하지 않는다. 실제 생성은 프론트가 확인 후 기존 엔드포인트로 진행.
  *
- *  ※ STT 엔진을 CLOVA → GCP(GcpSpeechService) 로 교체.
- *    반환 타입(SttResult: fullText/diarizedText)이 동일해 아래 호출부만 바뀐다.
+ *  ※ STT 엔진 = 네이버 CLOVA (ClovaSpeechService).
  */
 @Service
 @RequiredArgsConstructor
@@ -28,8 +27,8 @@ public class CallParsingService {
     private static final Logger logger = LoggerFactory.getLogger(CallParsingService.class);
     private static final String ADMIN_UID = "4979532269";
 
-    // [변경] ClovaSpeechService → GcpSpeechService
-    private final GcpSpeechService gcpSpeechService;
+    // STT = 네이버 CLOVA
+    private final ClovaSpeechService clovaSpeechService;
     private final LlmExtractionService llmExtractionService;
     private final UserRepository userRepository;
     private final UserPermissionRepository userPermissionRepository;
@@ -69,8 +68,7 @@ public class CallParsingService {
         }
         logger.info("통화 파싱 시작 - uid={}, file={}, size={}KB",
                 uid, audio.getOriginalFilename(), audio.getSize() / 1024);
-        // [변경] GCP STT 사용
-        return gcpSpeechService.transcribe(audio).diarizedText();
+        return clovaSpeechService.transcribe(audio).diarizedText();
     }
 
     // 계약자(임차인)/건물 초안

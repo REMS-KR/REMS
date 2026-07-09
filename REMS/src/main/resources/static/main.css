@@ -1262,52 +1262,6 @@ html.mode-web #modal {
 .perm-save:disabled { opacity: 0.7; cursor: default; }
 .perm-locked { font-size: 11.5px; color: var(--gray-400); font-weight: 600; padding: 0 8px; }
 
-/* ===================================================== */
-/* 계약자·임차인 관리 리스트 (관리자 탭)                        */
-/* ===================================================== */
-.tenant-card {
-    padding: 13px 14px; margin-bottom: 8px;
-    border: 1px solid var(--gray-200); border-radius: var(--radius-md);
-    background: var(--white); cursor: pointer;
-    transition: box-shadow 0.15s, border-color 0.15s, transform 0.08s;
-}
-.tenant-card:hover { box-shadow: var(--shadow-sm); border-color: var(--blue-light); }
-.tenant-card:active { transform: scale(0.995); }
-.tenant-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.tenant-bldg {
-    font-size: 14.5px; font-weight: 700; color: var(--gray-900);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.tenant-unit {
-    font-size: 11px; font-weight: 700; color: var(--blue);
-    background: var(--blue-light); border-radius: 6px; padding: 1px 7px; margin-left: 2px;
-}
-.tenant-phone {
-    flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px;
-    font-size: 12.5px; font-weight: 600; color: var(--gray-600);
-}
-.tenant-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 7px; flex-wrap: wrap; }
-.tenant-price { font-size: 13px; font-weight: 800; color: var(--blue); letter-spacing: -0.2px; }
-.tenant-period { font-size: 11.5px; color: var(--gray-400); font-weight: 600; }
-
-/* ===== 통화 녹음 버튼 (+ 버튼과 동일한 모양, 바로 위에 배치되어 함께 이동) ===== */
-#call-parse-float {
-    position: absolute; right: 14px; bottom: 216px; z-index: 50;
-    width: 44px; height: 44px; border-radius: 12px;
-    background: var(--green); border: none; color: var(--white);
-    box-shadow: var(--shadow-md);
-    display: flex; align-items: center; justify-content: center; cursor: pointer;
-    transition: opacity 0.3s ease, transform 0.25s cubic-bezier(0.34,1.56,0.64,1),
-                background 0.25s, box-shadow 0.2s, bottom 0.4s cubic-bezier(0.4,0,0.2,1);
-}
-#call-parse-float:active { transform: scale(0.93); }
-/* + 버튼이 아래로 내려갈 때(하단 UI 숨김) 항상 54px 위를 유지하며 함께 이동 */
-#app.chrome-hidden #call-parse-float { bottom: calc(max(26px, env(safe-area-inset-bottom)) + 54px); opacity: 1; pointer-events: auto; }
-/* 위치 지정(피커) 모드에서는 + 가 취소(×)로 바뀌므로 전화 버튼은 숨김 */
-#app.picker-active #call-parse-float { opacity: 0; pointer-events: none; transform: scale(0.85); }
-/* 웹(데스크톱) 레이아웃 — + 버튼 24px 기준 위 */
-html.mode-web #call-parse-float { right: 18px; bottom: 78px; }
-
 /* =====================================================================
  * 계약자 · 고객 카드 재구성 — main.css 맨 아래에 붙여넣기
  * (기존 .tenant-card 컨테이너는 그대로 재사용하고, 내부 레이아웃만 교체)
