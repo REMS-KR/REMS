@@ -112,7 +112,7 @@
     function handleAudioPick(e, fnameId) {
         const file = (e.target.files && e.target.files[0]) ? e.target.files[0] : null;
         if (file && !isAllowedAudioFile(file)) {
-            showToast('녹음 파일(m4a·mp3·wav·aac·amr·ogg·flac 등)만 올릴 수 있습니다');
+            alert('녹음 파일만 올릴 수 있습니다.\n\n허용 형식: m4a · mp3 · wav · aac · amr · ogg · flac 등');
             e.target.value = '';
             _pickedFile = null;
             const fn = document.getElementById(fnameId);
