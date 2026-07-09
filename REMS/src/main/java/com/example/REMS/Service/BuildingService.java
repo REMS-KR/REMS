@@ -145,24 +145,35 @@ public class BuildingService {
 
     // 건물 추가 (작성자 = 토큰의 사용자, 미디어 파일 여러 장 선택)
     @Transactional
-    public BuildingDTO createBuilding(String uid, BuildingDTO buildingDTO, List<MultipartFile> mediaFiles, UserDetails userDetails) {
+    public BuildingDTO createBuilding(String uid, BuildingDTO buildingDTO,
+                                      List<MultipartFile> mediaFiles, List<MultipartFile> vacancyFiles,
+                                      UserDetails userDetails) {
         UserEntity owner = getAuthorizedUser(uid, userDetails);
         requirePermission(uid, "CREATE");
 
-        // 장수 제한 검사 (업로드 전에 차단)
+        // 장수 제한 검사 (호실 사진 / 공실표 각각, 업로드 전에 차단)
         if (countFiles(mediaFiles) > MAX_IMAGES) {
-            throw new ImageLimitExceededException("사진은 최대 " + MAX_IMAGES + "장까지만 첨부할 수 있습니다.");
+            throw new ImageLimitExceededException("호실 사진은 최대 " + MAX_IMAGES + "장까지만 첨부할 수 있습니다.");
+        }
+        if (countFiles(vacancyFiles) > MAX_IMAGES) {
+            throw new ImageLimitExceededException("공실표는 최대 " + MAX_IMAGES + "장까지만 첨부할 수 있습니다.");
         }
 
         BuildingEntity buildingEntity = buildingDTO.dtoToEntity(owner);
 
-        // 새로 업로드한 이미지로 목록 구성
+        // 호실 사진 (mediaURLs)
         List<String> uploaded = uploadMediaList(mediaFiles);
         buildingEntity.getMediaURLs().clear();
         buildingEntity.getMediaURLs().addAll(uploaded);
 
+        // 공실표 (vacancyURLs)
+        List<String> uploadedVac = uploadMediaList(vacancyFiles);
+        buildingEntity.getVacancyURLs().clear();
+        buildingEntity.getVacancyURLs().addAll(uploadedVac);
+
         BuildingEntity savedBuilding = buildingRepository.save(buildingEntity);
-        logger.info("건물 등록 완료! 작성자: {}, id={}, 이미지 {}장", uid, savedBuilding.getId(), uploaded.size());
+        logger.info("건물 등록 완료! 작성자: {}, id={}, 호실사진 {}장, 공실표 {}장",
+                uid, savedBuilding.getId(), uploaded.size(), uploadedVac.size());
         return BuildingDTO.entityToDto(savedBuilding);
     }
 
@@ -170,7 +181,7 @@ public class BuildingService {
     public List<BuildingDTO> getAllBuildings(String uid, UserDetails userDetails) {
         checkAuth(uid, userDetails);
         List<BuildingDTO> buildings = buildingRepository.findByDeletedAtIsNull().stream()
-                .map(BuildingDTO::entityToDto)
+                .map(b -> BuildingDTO.entityToDtoForViewer(b, uid))   // 공실표는 소유자에게만
                 .collect(Collectors.toList());
         logger.info("전체 건물 {}개 조회 완료! 요청자: {}", buildings.size(), uid);
         return buildings;
@@ -182,14 +193,14 @@ public class BuildingService {
         BuildingEntity buildingEntity = buildingRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("건물을 찾을 수 없습니다"));
         logger.info("{}번 건물 조회 완료! 요청자: {}", id, uid);
-        return BuildingDTO.entityToDto(buildingEntity);
+        return BuildingDTO.entityToDtoForViewer(buildingEntity, uid);   // 공실표는 소유자에게만
     }
 
     @Transactional(readOnly = true)
     public List<BuildingDTO> search(String uid, String keyword, UserDetails userDetails) {
         checkAuth(uid, userDetails);
         return buildingRepository.searchAll(keyword).stream()
-                .map(BuildingDTO::entityToDto)
+                .map(b -> BuildingDTO.entityToDtoForViewer(b, uid))
                 .collect(Collectors.toList());
     }
 
@@ -197,7 +208,7 @@ public class BuildingService {
     public List<BuildingDTO> findByType(String uid, String type, UserDetails userDetails) {
         checkAuth(uid, userDetails);
         return buildingRepository.findByTypeAndDeletedAtIsNull(type).stream()
-                .map(BuildingDTO::entityToDto)
+                .map(b -> BuildingDTO.entityToDtoForViewer(b, uid))
                 .collect(Collectors.toList());
     }
 
@@ -206,7 +217,7 @@ public class BuildingService {
     public List<BuildingDTO> findByDealType(String uid, String dealType, UserDetails userDetails) {
         checkAuth(uid, userDetails);
         return buildingRepository.findByDealTypeAndDeletedAtIsNull(dealType).stream()
-                .map(BuildingDTO::entityToDto)
+                .map(b -> BuildingDTO.entityToDtoForViewer(b, uid))
                 .collect(Collectors.toList());
     }
 
@@ -215,7 +226,9 @@ public class BuildingService {
     //  - mediaFiles            : 새로 추가 업로드할 파일들
     //  → 최종 이미지 = 유지목록 + 신규 업로드
     @Transactional
-    public BuildingDTO updateBuilding(String uid, BuildingDTO buildingDTO, List<MultipartFile> mediaFiles, UserDetails userDetails) {
+    public BuildingDTO updateBuilding(String uid, BuildingDTO buildingDTO,
+                                      List<MultipartFile> mediaFiles, List<MultipartFile> vacancyFiles,
+                                      UserDetails userDetails) {
         checkAuth(uid, userDetails);
         BuildingEntity buildingEntity = buildingRepository.findById(buildingDTO.getId())
                 .orElseThrow(() -> new IllegalArgumentException("건물을 찾을 수 없습니다"));
@@ -238,26 +251,35 @@ public class BuildingService {
         buildingEntity.setPetAllowed(buildingDTO.getPetAllowed());
         buildingEntity.setMemo(buildingDTO.getMemo());
 
-        // 유지할 기존 이미지 + 새로 업로드한 이미지 병합
+        // ===== 호실 사진 (mediaURLs): 유지목록 + 신규 업로드 병합 =====
         List<String> keep = (buildingDTO.getMediaURLs() != null) ? buildingDTO.getMediaURLs() : new ArrayList<>();
-
-        // 장수 제한 검사 (유지목록 + 신규파일, 업로드 전에 차단)
         if (keep.size() + countFiles(mediaFiles) > MAX_IMAGES) {
-            throw new ImageLimitExceededException("사진은 최대 " + MAX_IMAGES + "장까지만 첨부할 수 있습니다.");
+            throw new ImageLimitExceededException("호실 사진은 최대 " + MAX_IMAGES + "장까지만 첨부할 수 있습니다.");
+        }
+
+        // ===== 공실표 (vacancyURLs): 유지목록 + 신규 업로드 병합 =====
+        List<String> keepVac = (buildingDTO.getVacancyURLs() != null) ? buildingDTO.getVacancyURLs() : new ArrayList<>();
+        if (keepVac.size() + countFiles(vacancyFiles) > MAX_IMAGES) {
+            throw new ImageLimitExceededException("공실표는 최대 " + MAX_IMAGES + "장까지만 첨부할 수 있습니다.");
         }
 
         List<String> added = uploadMediaList(mediaFiles);
-
         List<String> merged = new ArrayList<>();
         merged.addAll(keep);
         merged.addAll(added);
-
         // 영속 컬렉션을 직접 비우고 다시 채워야 @ElementCollection 이 안전하게 갱신됨
         buildingEntity.getMediaURLs().clear();
         buildingEntity.getMediaURLs().addAll(merged);
 
-        logger.info("{}번 건물 수정 완료! 작성자: {}, 유지 {}장 + 신규 {}장 = 총 {}장",
-                buildingEntity.getId(), uid, keep.size(), added.size(), merged.size());
+        List<String> addedVac = uploadMediaList(vacancyFiles);
+        List<String> mergedVac = new ArrayList<>();
+        mergedVac.addAll(keepVac);
+        mergedVac.addAll(addedVac);
+        buildingEntity.getVacancyURLs().clear();
+        buildingEntity.getVacancyURLs().addAll(mergedVac);
+
+        logger.info("{}번 건물 수정 완료! 작성자: {}, 호실사진 {}장(+{}), 공실표 {}장(+{})",
+                buildingEntity.getId(), uid, merged.size(), added.size(), mergedVac.size(), addedVac.size());
         return BuildingDTO.entityToDto(buildingEntity);
     }
 

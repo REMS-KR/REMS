@@ -136,19 +136,21 @@ const Api = {
         fetch(`${API_BASE_URL}/building/all/${getUid()}`, { headers: authHeaders() }).then(handleResponse),
     getBuilding: (id) =>
         fetch(`${API_BASE_URL}/building/id/${getUid()}/${id}`, { headers: authHeaders() }).then(handleResponse),
-    createBuilding: (dto, mediaFiles) => {
+    createBuilding: (dto, mediaFiles, vacancyFiles) => {
         const fd = new FormData();
         fd.append('uid', getUid());                       // @RequestPart("uid") String
         fd.append('buildingData', JSON.stringify(dto));   // @RequestPart("buildingData") String
-        (mediaFiles || []).forEach(f => fd.append('mediaData', f));  // @RequestPart("mediaData") List<MultipartFile> (여러 장, 선택)
+        (mediaFiles || []).forEach(f => fd.append('mediaData', f));      // 호실 사진
+        (vacancyFiles || []).forEach(f => fd.append('vacancyData', f));  // 공실표
         // FormData 전송 시 Content-Type은 브라우저가 boundary와 함께 자동 설정 → authHeaders()만 사용
         return fetch(`${API_BASE_URL}/building`, { method: 'POST', headers: authHeaders(), body: fd }).then(handleResponse);
     },
-    updateBuilding: (dto, mediaFiles) => {
+    updateBuilding: (dto, mediaFiles, vacancyFiles) => {
         const fd = new FormData();
         fd.append('uid', getUid());
-        fd.append('buildingData', JSON.stringify(dto));   // dto.mediaURLs = 유지할 기존 이미지 목록, dto.id 포함
-        (mediaFiles || []).forEach(f => fd.append('mediaData', f));  // 새로 추가 업로드할 파일들
+        fd.append('buildingData', JSON.stringify(dto));   // dto.mediaURLs = 유지할 호실사진, dto.vacancyURLs = 유지할 공실표, dto.id 포함
+        (mediaFiles || []).forEach(f => fd.append('mediaData', f));      // 새로 추가할 호실 사진
+        (vacancyFiles || []).forEach(f => fd.append('vacancyData', f));  // 새로 추가할 공실표
         return fetch(`${API_BASE_URL}/building`, { method: 'PUT', headers: authHeaders(), body: fd }).then(handleResponse);
     },
     deleteBuilding: (id) =>
@@ -1771,16 +1773,14 @@ function confirmPickerLocation() {
 
 // ===== 건물 이미지(여러 장) 관리 =====
 const MAX_BUILDING_IMAGES = 10;   // 건물당 첨부 가능한 최대 이미지 수
-let bfKeepUrls = [];   // 건물 수정 시 "유지할" 기존 이미지 URL 목록
-let bfNewFiles = [];   // 새로 추가한 파일(File) 목록
+let bfKeepUrls = [];   // [호실사진] 수정 시 "유지할" 기존 이미지 URL 목록
+let bfNewFiles = [];   // [호실사진] 새로 추가한 파일(File) 목록
+let bfKeepVac = [];    // [공실표] 수정 시 "유지할" 기존 이미지 URL 목록
+let bfNewVac = [];     // [공실표] 새로 추가한 파일(File) 목록
 
-// 건물 상세 이미지 갤러리 — 가로 스와이프 캐러셀 (스크롤 스냅 + 점 인디케이터)
-function renderGallery(b) {
-    const arr = (b && b.mediaURLs) ? b.mediaURLs : [];
-    if (!arr.length) return '';
-    const gid = 'gal-' + (b && b.id ? b.id : Math.random().toString(36).slice(2));
-    const safeName = (b && b.name ? b.name : '').replace(/"/g, '&quot;');
-
+// 이미지 캐러셀 1개 블록 (제목 라벨 + 가로 스와이프)
+function renderGalleryBlock(arr, gid, safeName, title) {
+    if (!arr || !arr.length) return '';
     const slides = arr.map((u, i) => `
       <div class="gal-slide">
         <img src="${u}" alt="${safeName}"
@@ -1798,12 +1798,28 @@ function renderGallery(b) {
       <button class="gal-nav prev" onclick="galleryNav('${gid}',-1,${arr.length},event)" aria-label="이전 사진">${icon('back', 20)}</button>
       <button class="gal-nav next" onclick="galleryNav('${gid}',1,${arr.length},event)" aria-label="다음 사진">${icon('back', 20, 'transform:rotate(180deg);')}</button>` : '';
 
-    return `<div class="gallery-wrap">
+    const label = title ? `<div style="font-size:12px;font-weight:800;color:#6b7280;margin:2px 2px 6px;letter-spacing:-0.2px;">${title}</div>` : '';
+
+    return `${label}<div class="gallery-wrap">
       <div class="gal-track" id="${gid}" onscroll="onGalleryScroll('${gid}', ${arr.length})">${slides}</div>
       ${navs}
       ${counter}
       ${dots}
     </div>`;
+}
+
+// 건물 상세 이미지 갤러리 — '호실 사진'(모두 공개) + '공실표'(소유자 전용)
+function renderGallery(b) {
+    const base = (b && b.id ? b.id : Math.random().toString(36).slice(2));
+    const safeName = (b && b.name ? b.name : '').replace(/"/g, '&quot;');
+
+    const unit = renderGalleryBlock((b && b.mediaURLs) || [], 'galu-' + base, safeName, '호실 사진');
+    // 공실표는 소유자에게만 표시 (서버에서도 비소유자에겐 빈 배열로 내려옴)
+    const showVac = isMine(b) && b && b.vacancyURLs && b.vacancyURLs.length;
+    const vac = showVac ? renderGalleryBlock(b.vacancyURLs, 'galv-' + base, safeName, '공실표') : '';
+
+    if (!unit && !vac) return '';
+    return `<div style="margin-bottom:4px;">${unit}${vac ? `<div style="margin-top:14px;">${vac}</div>` : ''}</div>`;
 }
 
 // 이전/다음 버튼 → 한 장씩 부드럽게 스크롤(스냅)
@@ -1894,16 +1910,68 @@ function removeBfNewFile(idx) {
     updateBfCount();
 }
 
-// 현재 첨부 수 라벨 갱신 (기존 유지 + 신규)
+// 현재 첨부 수 라벨 갱신 (호실 사진 / 공실표 각각)
 function updateBfCount() {
     const el = document.getElementById('bf-count');
     if (el) el.textContent = (bfKeepUrls.length + bfNewFiles.length) + ' / ' + MAX_BUILDING_IMAGES;
+    const elv = document.getElementById('bf-vac-count');
+    if (elv) elv.textContent = (bfKeepVac.length + bfNewVac.length) + ' / ' + MAX_BUILDING_IMAGES;
+}
+
+// ===== 공실표(vacancyURLs) 폼 헬퍼 =====
+function renderBfVacExisting() {
+    const box = document.getElementById('bf-vac-existing');
+    if (!box) return;
+    if (!bfKeepVac.length) { box.innerHTML = '<div class="bf-empty">기존 공실표 없음</div>'; return; }
+    box.innerHTML = bfKeepVac.map((u, i) => `
+      <div class="bf-thumb">
+        <img src="${u}" onerror="this.parentElement.style.display='none'">
+        <button type="button" class="bf-thumb-del" onclick="removeBfVacImage(${i})">${icon('close',14)}</button>
+      </div>`).join('');
+}
+function removeBfVacImage(idx) {
+    bfKeepVac.splice(idx, 1);
+    renderBfVacExisting();
+    updateBfCount();
+}
+function addBfVacFiles(e) {
+    const picked = Array.from((e.target && e.target.files) ? e.target.files : []);
+    const room = MAX_BUILDING_IMAGES - (bfKeepVac.length + bfNewVac.length);
+    if (room <= 0) {
+        showToast(`공실표는 최대 ${MAX_BUILDING_IMAGES}장만 첨부 가능합니다`);
+        e.target.value = '';
+        return;
+    }
+    if (picked.length > room) {
+        showToast(`공실표는 최대 ${MAX_BUILDING_IMAGES}장만 첨부 가능합니다 (지금 ${room}장까지 추가)`);
+    }
+    bfNewVac = bfNewVac.concat(picked.slice(0, room));
+    e.target.value = '';
+    renderBfVacNewPreview();
+    updateBfCount();
+}
+function renderBfVacNewPreview() {
+    const box = document.getElementById('bf-vac-new-preview');
+    if (!box) return;
+    box.innerHTML = bfNewVac.map((f, i) => `
+      <div class="bf-thumb">
+        <img src="${URL.createObjectURL(f)}">
+        <button type="button" class="bf-thumb-del" onclick="removeBfVacNewFile(${i})">${icon('close',14)}</button>
+        <span class="bf-thumb-new">NEW</span>
+      </div>`).join('');
+}
+function removeBfVacNewFile(idx) {
+    bfNewVac.splice(idx, 1);
+    renderBfVacNewPreview();
+    updateBfCount();
 }
 
 function openBuildingForm(building, lat, lng, addr) {
     const isEdit = !!building;
     bfKeepUrls = (building && building.mediaURLs) ? building.mediaURLs.slice() : [];
     bfNewFiles = [];
+    bfKeepVac = (building && building.vacancyURLs) ? building.vacancyURLs.slice() : [];
+    bfNewVac = [];
     document.getElementById('modal-title').textContent = isEdit ? '건물 수정' : '건물 추가';
 
     document.getElementById('modal-body').innerHTML = `
@@ -1949,11 +2017,6 @@ function openBuildingForm(building, lat, lng, addr) {
         <input id="f-manage" class="form-input" type="number" min="0" placeholder="예: 5" value="${building ? (building.manage || '') : ''}">
       </div>
     </div>
-    ${isEdit ? `
-    <div class="form-group">
-      <label class="form-label">현재 사진 <span style="font-weight:400;color:#9ca3af;">(${icon('close',11)} 눌러 제거)</span></label>
-      <div id="bf-existing" class="bf-thumb-wrap"></div>
-    </div>` : ''}
     <div class="form-group">
       <label class="form-label">옵션</label>
       <div class="toggle-row">
@@ -1972,10 +2035,20 @@ function openBuildingForm(building, lat, lng, addr) {
     })()}
       </div>
     </div>
+    <div class="form-section-title" style="margin-top:8px;">사진 첨부</div>
+    <!-- 호실 사진: 모든 사용자에게 표시 -->
     <div class="form-group">
-      <label class="form-label">사진/미디어 <span style="font-weight:400;color:#9ca3af;">(최대 ${MAX_BUILDING_IMAGES}장 · <span id="bf-count">0 / ${MAX_BUILDING_IMAGES}</span>)</span></label>
+      <label class="form-label">호실 사진 <span style="font-weight:400;color:#9ca3af;">(모든 사용자에게 표시 · 최대 ${MAX_BUILDING_IMAGES}장 · <span id="bf-count">0 / ${MAX_BUILDING_IMAGES}</span>)</span></label>
+      ${isEdit ? `<div id="bf-existing" class="bf-thumb-wrap"></div>` : ''}
       <input id="f-media" class="form-input" type="file" accept="image/*,video/*" multiple onchange="addBfFiles(event)">
       <div id="bf-new-preview" class="bf-thumb-wrap"></div>
+    </div>
+    <!-- 공실표: 소유자에게만 표시 -->
+    <div class="form-group">
+      <label class="form-label">공실표 <span style="font-weight:400;color:#9ca3af;">(소유자에게만 표시 · 최대 ${MAX_BUILDING_IMAGES}장 · <span id="bf-vac-count">0 / ${MAX_BUILDING_IMAGES}</span>)</span></label>
+      ${isEdit ? `<div id="bf-vac-existing" class="bf-thumb-wrap"></div>` : ''}
+      <input id="f-media-vac" class="form-input" type="file" accept="image/*,video/*" multiple onchange="addBfVacFiles(event)">
+      <div id="bf-vac-new-preview" class="bf-thumb-wrap"></div>
     </div>
   `;
 
@@ -1985,7 +2058,8 @@ function openBuildingForm(building, lat, lng, addr) {
     <button class="btn-primary" onclick="saveBuilding('${isEdit ? building.id : ''}', ${lat||building?.lat}, ${lng||building?.lng})">저장</button>
   `;
 
-    renderBfExisting();   // 수정 시 기존 이미지 썸네일 표시
+    renderBfExisting();      // 수정 시 기존 호실 사진 썸네일
+    renderBfVacExisting();   // 수정 시 기존 공실표 썸네일
     updateBfCount();
     selectDeal('f', isEdit ? inferDeal(building) : 'monthly');   // 대표 거래유형 초기 상태(라벨/월세칸)
     showModal();
@@ -2021,10 +2095,16 @@ async function saveBuilding(id, lat, lng) {
         lat: parseFloat(lat), lng: parseFloat(lng)
     };
 
-    const mediaFiles = bfNewFiles;            // 새로 추가한 파일들
-    dto.mediaURLs = bfKeepUrls;               // 유지할 기존 이미지 목록 (제거된 건 빠져있음)
+    const mediaFiles = bfNewFiles;            // 새로 추가한 호실 사진
+    const vacancyFiles = bfNewVac;            // 새로 추가한 공실표
+    dto.mediaURLs = bfKeepUrls;               // 유지할 호실 사진 (제거된 건 빠져있음)
+    dto.vacancyURLs = bfKeepVac;              // 유지할 공실표
     if (bfKeepUrls.length + mediaFiles.length > MAX_BUILDING_IMAGES) {
-        showToast(`최대 ${MAX_BUILDING_IMAGES}장만 첨부 가능합니다`);
+        showToast(`호실 사진은 최대 ${MAX_BUILDING_IMAGES}장만 첨부 가능합니다`);
+        return;
+    }
+    if (bfKeepVac.length + vacancyFiles.length > MAX_BUILDING_IMAGES) {
+        showToast(`공실표는 최대 ${MAX_BUILDING_IMAGES}장만 첨부 가능합니다`);
         return;
     }
 
@@ -2032,9 +2112,9 @@ async function saveBuilding(id, lat, lng) {
     try {
         if (id) {
             dto.id = id;
-            await Api.updateBuilding(dto, mediaFiles);   // 유지목록 + 새 파일들
+            await Api.updateBuilding(dto, mediaFiles, vacancyFiles);   // 유지목록 + 새 파일들 (호실사진/공실표)
         } else {
-            await Api.createBuilding(dto, mediaFiles);
+            await Api.createBuilding(dto, mediaFiles, vacancyFiles);
         }
         await loadData();
         closeModal();

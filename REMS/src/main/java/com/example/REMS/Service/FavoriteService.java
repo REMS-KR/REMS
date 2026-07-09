@@ -72,7 +72,7 @@ public class FavoriteService {
                 .map(FavoriteEntity::getBuildingId)
                 .map(id -> buildingRepository.findById(id).orElse(null))
                 .filter(b -> b != null && b.getDeletedAt() == null)   // 존재 + 정상(휴지통 아님)
-                .map(BuildingDTO::entityToDto)
+                .map(b -> BuildingDTO.entityToDtoForViewer(b, uid))   // 공실표는 소유자에게만
                 .collect(Collectors.toList());
     }
 }

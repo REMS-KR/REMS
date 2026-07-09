@@ -51,6 +51,11 @@ public class BuildingDTO {
     // 등록 일시(epoch millis). 응답 표시용(읽기 전용) — 프론트에서 날짜만 표시.
     private Long createdAt;
 
+    // 공실표 이미지 목록 (소유자 전용). 비소유자 응답에는 빈 배열로 내려간다.
+    //  - 수정 요청(DTO→서비스): "유지할 기존 공실표 이미지" 목록
+    @Builder.Default
+    private List<String> vacancyURLs = new ArrayList<>();
+
     public static BuildingDTO entityToDto(BuildingEntity buildingEntity) {
         List<UnitDTO> unitDTOs = buildingEntity.getUnits().stream()
                 .map(UnitDTO::entityToDto)
@@ -59,6 +64,10 @@ public class BuildingDTO {
 
         List<String> mediaURLs = (buildingEntity.getMediaURLs() != null)
                 ? new ArrayList<>(buildingEntity.getMediaURLs())
+                : new ArrayList<>();
+
+        List<String> vacancyURLs = (buildingEntity.getVacancyURLs() != null)
+                ? new ArrayList<>(buildingEntity.getVacancyURLs())
                 : new ArrayList<>();
 
         Long deletedAtMillis = (buildingEntity.getDeletedAt() != null)
@@ -90,7 +99,20 @@ public class BuildingDTO {
                 buildingEntity.getJeonseLoanType(),
                 buildingEntity.getParkingAvailable(),
                 buildingEntity.getPetAllowed(),
-                createdAtMillis);
+                createdAtMillis,
+                vacancyURLs);
+    }
+
+    // 뷰어(요청자) 기준 변환 — 소유자가 아니면 공실표(vacancyURLs)를 비워서 내려준다.
+    public static BuildingDTO entityToDtoForViewer(BuildingEntity buildingEntity, String viewerUid) {
+        BuildingDTO dto = entityToDto(buildingEntity);
+        boolean isOwner = buildingEntity.getOwner() != null
+                && viewerUid != null
+                && viewerUid.equals(buildingEntity.getOwner().getUid());
+        if (!isOwner) {
+            dto.setVacancyURLs(new ArrayList<>());   // 공실표는 소유자에게만
+        }
+        return dto;
     }
 
     public BuildingEntity dtoToEntity(UserEntity owner) {
@@ -112,6 +134,7 @@ public class BuildingDTO {
                 .parkingAvailable(parkingAvailable)
                 .petAllowed(petAllowed)
                 .mediaURLs(mediaURLs != null ? new ArrayList<>(mediaURLs) : new ArrayList<>())
+                .vacancyURLs(vacancyURLs != null ? new ArrayList<>(vacancyURLs) : new ArrayList<>())
                 .owner(owner)
                 .units(new ArrayList<>())
                 .build();

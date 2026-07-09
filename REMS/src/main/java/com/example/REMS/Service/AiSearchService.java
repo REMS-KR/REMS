@@ -78,7 +78,7 @@ public class AiSearchService {
         // 2) 정상(휴지통 아님) 매물 전체를 코드로 선별
         List<BuildingDTO> matched = buildingRepository.findByDeletedAtIsNull().stream()
                 .filter(b -> matches(b, c))
-                .map(BuildingDTO::entityToDto)
+                .map(b -> BuildingDTO.entityToDtoForViewer(b, uid))   // 공실표는 소유자에게만
                 .collect(Collectors.toList());
 
         String summary = buildSummary(c, matched.size());

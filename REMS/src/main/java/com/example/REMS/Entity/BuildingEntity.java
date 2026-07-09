@@ -60,7 +60,16 @@ public class BuildingEntity {
     @OrderColumn(name = "sort_order")
     @Column(name = "media_url", length = 1000)
     @Builder.Default
-    private List<String> mediaURLs = new ArrayList<>();
+    private List<String> mediaURLs = new ArrayList<>();   // 호실 사진 — 모든 사용자에게 공개
+
+    // 공실표 이미지 — 소유자에게만 표시(응답 시 비소유자에게는 서버에서 제거)
+    // building_vacancy 테이블에 (building_id, sort_order, media_url) 로 저장됨
+    @ElementCollection
+    @CollectionTable(name = "building_vacancy", joinColumns = @JoinColumn(name = "building_id"))
+    @OrderColumn(name = "sort_order")
+    @Column(name = "media_url", length = 1000)
+    @Builder.Default
+    private List<String> vacancyURLs = new ArrayList<>();
 
     // 작성자(소유자) — users 테이블과 N:1 외래키 (owner_id)
     @ManyToOne(fetch = FetchType.LAZY)

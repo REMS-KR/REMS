@@ -29,10 +29,11 @@ public class BuildingController {
     public ResponseEntity<BuildingDTO> createBuilding(@RequestPart("uid") String uid,
                                                       @RequestPart("buildingData") String buildingData,
                                                       @RequestPart(value = "mediaData", required = false) List<MultipartFile> mediaData,
+                                                      @RequestPart(value = "vacancyData", required = false) List<MultipartFile> vacancyData,
                                                       @AuthenticationPrincipal UserDetails userDetails) {
         ObjectMapper mapper = new ObjectMapper();
         BuildingDTO buildingDTO = mapper.readValue(buildingData, BuildingDTO.class);
-        return ResponseEntity.ok(buildingService.createBuilding(uid, buildingDTO, mediaData, userDetails));
+        return ResponseEntity.ok(buildingService.createBuilding(uid, buildingDTO, mediaData, vacancyData, userDetails));
     }
 
     // 전체 건물 조회
@@ -86,10 +87,11 @@ public class BuildingController {
     public ResponseEntity<BuildingDTO> updateBuilding(@RequestPart("uid") String uid,
                                                       @RequestPart("buildingData") String buildingData,
                                                       @RequestPart(value = "mediaData", required = false) List<MultipartFile> mediaData,
+                                                      @RequestPart(value = "vacancyData", required = false) List<MultipartFile> vacancyData,
                                                       @AuthenticationPrincipal UserDetails userDetails) {
         ObjectMapper mapper = new ObjectMapper();
         BuildingDTO buildingDTO = mapper.readValue(buildingData, BuildingDTO.class);
-        return ResponseEntity.ok(buildingService.updateBuilding(uid, buildingDTO, mediaData, userDetails));
+        return ResponseEntity.ok(buildingService.updateBuilding(uid, buildingDTO, mediaData, vacancyData, userDetails));
     }
 
     // 건물 삭제 (호실까지 함께 삭제)
