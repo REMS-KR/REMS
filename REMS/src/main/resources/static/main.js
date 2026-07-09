@@ -379,6 +379,20 @@ function ensureFavStyles() {
 .fav-btn.on { color: #ef4444; border-color: #fecaca; background: #fef2f2; }
 .fav-btn.fav-detail { width: auto; height: auto; padding: 7px 12px; font-size: 13px; font-weight: 700; }
 .fav-btn .fav-label { line-height: 1; }
+/* 상세 갤러리 세그먼트 탭 (호실 사진 / 공실표) — 작고 가로로 꽉 찬 iOS 스타일 */
+.gal-tabs {
+    display: flex; gap: 4px; padding: 4px; margin: 0 0 10px;
+    background: var(--gray-100, #f3f4f6); border-radius: 10px;
+}
+.gal-tab {
+    flex: 1; padding: 7px 10px; border: none; background: transparent;
+    border-radius: 7px; cursor: pointer;
+    font-size: 12.5px; font-weight: 700; color: var(--gray-500, #6b7280);
+    letter-spacing: -0.2px;
+    transition: background .15s, color .15s, box-shadow .15s;
+}
+.gal-tab.active { background: #fff; color: #1a56db; box-shadow: 0 1px 3px rgba(17,24,39,0.10); }
+.gal-tab:active { transform: scale(0.98); }
 `;
     const style = document.createElement('style');
     style.id = 'fav-styles';
@@ -700,7 +714,7 @@ async function initMap() {
     // 현재 위치 추적 시작(파란 점). iOS가 아니면 나침반도 바로 연결
     startGeolocationTracking();
     if (!(typeof DeviceOrientationEvent !== 'undefined' &&
-          typeof DeviceOrientationEvent.requestPermission === 'function')) {
+        typeof DeviceOrientationEvent.requestPermission === 'function')) {
         ensureOrientationPermission();
     }
 
@@ -726,13 +740,13 @@ function gotoMyLocation() {
 function centerOnCurrentLocationOnce() {
     if (!navigator.geolocation || !map) return;
     navigator.geolocation.getCurrentPosition(pos => {
-        if (_suppressAutoCenter) return;     // 그 사이 사용자가 지도를 조작했으면 중단
-        const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
-        updateGeoMarker(latlng, pos.coords.heading);
-        map.setCenter(latlng);
-        map.setZoom(16);
-    }, () => { /* 거부/실패 → 기본 서울 중심 유지 */ },
-       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+            if (_suppressAutoCenter) return;     // 그 사이 사용자가 지도를 조작했으면 중단
+            const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+            updateGeoMarker(latlng, pos.coords.heading);
+            map.setCenter(latlng);
+            map.setZoom(16);
+        }, () => { /* 거부/실패 → 기본 서울 중심 유지 */ },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
 }
 
 // =====================================================
@@ -1657,7 +1671,7 @@ function agencySectionHTML(p) {
       <div class="oa-row">
         <span class="oa-row-ic">${icon(ic, 15)}</span>
         ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g, ''))}" class="oa-tel">${escapeHtml(val)}</a>`
-            : `<span>${escapeHtml(val)}</span>`}
+        : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
       <div class="oa-agency">
@@ -1677,7 +1691,7 @@ function agencyCardHTML(p) {
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;">
         <span style="color:#1a56db;display:inline-flex;">${icon(ic, 15)}</span>
         ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g,''))}" style="color:#1a56db;text-decoration:none;font-weight:600;">${escapeHtml(val)}</a>`
-                : `<span>${escapeHtml(val)}</span>`}
+        : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
       <div style="margin-bottom:12px;padding:12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;text-align:left;">
@@ -1808,18 +1822,57 @@ function renderGalleryBlock(arr, gid, safeName, title) {
     </div>`;
 }
 
-// 건물 상세 이미지 갤러리 — '호실 사진'(모두 공개) + '공실표'(소유자 전용)
+// 건물 상세 이미지 — '호실 사진' / '공실표' 탭 전환 (둘 다 있을 때만 탭, 하나면 그대로)
 function renderGallery(b) {
     const base = (b && b.id ? b.id : Math.random().toString(36).slice(2));
     const safeName = (b && b.name ? b.name : '').replace(/"/g, '&quot;');
 
-    const unit = renderGalleryBlock((b && b.mediaURLs) || [], 'galu-' + base, safeName, '호실 사진');
-    // 공실표는 소유자에게만 표시 (서버에서도 비소유자에겐 빈 배열로 내려옴)
-    const showVac = isMine(b) && b && b.vacancyURLs && b.vacancyURLs.length;
-    const vac = showVac ? renderGalleryBlock(b.vacancyURLs, 'galv-' + base, safeName, '공실표') : '';
+    const hasUnit = !!((b && b.mediaURLs) || []).length;
+    // 공실표는 소유자에게만 (서버에서도 비소유자에겐 빈 배열로 내려옴)
+    const hasVac = !!(isMine(b) && b && b.vacancyURLs && b.vacancyURLs.length);
 
-    if (!unit && !vac) return '';
-    return `<div style="margin-bottom:4px;">${unit}${vac ? `<div style="margin-top:14px;">${vac}</div>` : ''}</div>`;
+    if (!hasUnit && !hasVac) return '';
+
+    // 한쪽만 있으면 탭 없이 라벨만
+    if (hasUnit && !hasVac) {
+        return `<div style="margin-bottom:4px;">${renderGalleryBlock(b.mediaURLs, 'galu-' + base, safeName, '호실 사진')}</div>`;
+    }
+    if (!hasUnit && hasVac) {
+        return `<div style="margin-bottom:4px;">${renderGalleryBlock(b.vacancyURLs, 'galv-' + base, safeName, '공실표')}</div>`;
+    }
+
+    // 둘 다 있으면 세그먼트 탭으로 전환
+    const unitBlock = renderGalleryBlock(b.mediaURLs, 'galu-' + base, safeName, null);
+    const vacBlock = renderGalleryBlock(b.vacancyURLs, 'galv-' + base, safeName, null);
+    return `<div style="margin-bottom:4px;">
+      <div class="gal-tabs">
+        <button type="button" id="galtab-${base}-u" class="gal-tab active" onclick="switchGalleryTab('${base}','u',event)">호실 사진</button>
+        <button type="button" id="galtab-${base}-v" class="gal-tab" onclick="switchGalleryTab('${base}','v',event)">공실표</button>
+      </div>
+      <div id="galwrap-${base}-u">${unitBlock}</div>
+      <div id="galwrap-${base}-v" style="display:none;">${vacBlock}</div>
+    </div>`;
+}
+
+// 갤러리 탭 전환 — 보이는 쪽만 표시하고 높이 재계산
+function switchGalleryTab(base, which, ev) {
+    if (ev) ev.stopPropagation();
+    const showU = which === 'u';
+    const wrapU = document.getElementById('galwrap-' + base + '-u');
+    const wrapV = document.getElementById('galwrap-' + base + '-v');
+    const tabU = document.getElementById('galtab-' + base + '-u');
+    const tabV = document.getElementById('galtab-' + base + '-v');
+    if (wrapU) wrapU.style.display = showU ? '' : 'none';
+    if (wrapV) wrapV.style.display = showU ? 'none' : '';
+    if (tabU) tabU.classList.toggle('active', showU);
+    if (tabV) tabV.classList.toggle('active', !showU);
+    // 숨김 상태에선 clientWidth=0이라 높이가 안 잡혔을 수 있음 → 보이게 된 쪽 높이 재계산
+    const gid = showU ? ('galu-' + base) : ('galv-' + base);
+    const track = document.getElementById(gid);
+    if (track) {
+        const img = track.querySelector('img');
+        if (img && img.complete) fitGalleryHeight(gid, img);
+    }
 }
 
 // 이전/다음 버튼 → 한 장씩 부드럽게 스크롤(스냅)
