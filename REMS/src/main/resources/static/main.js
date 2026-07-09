@@ -2756,9 +2756,10 @@ function showTenantDetail(id) {
 }
 
 // 계약자 추가/수정 폼 (건물/호실 추가와 동일한 모달 스타일)
-function openTenantForm(id) {
-    const t = id ? _tenants.find(x => x.id === id) : null;
-    const isEdit = !!t;
+// prefill 있으면 신규 폼에 미리 채움(통화녹음 AI 초안). call-parse.js 에서 호출.
+function openTenantForm(id, prefill) {
+    const t = id ? _tenants.find(x => x.id === id) : (prefill || null);
+    const isEdit = !!id;
     document.getElementById('modal-title').textContent = isEdit ? '계약자 수정' : '계약자 추가';
     const f = (label, fid, val, ph, type) => `
       <div class="form-group">

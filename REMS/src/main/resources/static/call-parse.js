@@ -107,10 +107,10 @@
       <div class="cp-note">어떤 통화 녹음인가요? 유형에 맞게 자동으로 정리해 드립니다.</div>
       <div style="display:flex;flex-direction:column;gap:10px;">
         <button class="cp-choice" onclick="openTenantCallModal()">
-          ${icon('building', 22)}
+          ${icon('user', 22)}
           <div style="text-align:left;">
             <div class="cp-choice-t">계약자 (임차인)</div>
-            <div class="cp-choice-s">건물·호실·계약자 정보로 정리</div>
+            <div class="cp-choice-s">이름·전화·건물·호실·계약 정보로 계약자 등록</div>
           </div>
         </button>
         <button class="cp-choice" onclick="openCustomerCallModal()">
@@ -136,7 +136,7 @@
         document.getElementById('modal-body').innerHTML = `
       <div class="cp-note">
         통화 녹음 파일(m4a·mp3·wav 등)을 올리면 음성을 텍스트로 바꾸고
-        AI가 건물·호실·계약자 정보를 정리합니다. 확인·수정 후 등록하세요.
+        AI가 계약자(임차인) 정보를 정리합니다. 확인·수정 후 등록하세요.
       </div>
       <div class="cp-drop" id="cp-drop" onclick="document.getElementById('cp-file').click()">
         ${icon('phone', 26)}
@@ -159,22 +159,48 @@
         showModal();
     };
 
-    // ---- 2) 분석 시작 → STT+LLM ----------------------------------
+    // ---- 2) 분석 시작 → STT+LLM → 계약자 폼에 초안 채워서 오픈 ----
     window.startCallParse = async function () {
         if (_isSubmitting) return;
         if (!_pickedFile) { showToast('녹음 파일을 선택하세요'); return; }
 
-        showLoading('음성 인식 후 내용을 정리하는 중…');
+        showLoading('음성 인식 후 계약자 정보를 정리하는 중…');
         try {
             const draft = await Api.parseCall(_pickedFile);
-            _callDraft = normalizeDraft(draft);
-            renderCallDraft();
-        } catch (e) {
-            showToast('분석 실패: ' + (e.message || e));
-        } finally {
             hideLoading();
+            if (typeof openTenantForm === 'function') {
+                // 계약자(임차인) 폼에 AI 초안 미리 채움 → 저장 시 /tenant 로 '계약자'로 등록 (건물 생성 아님)
+                openTenantForm(null, draftToTenantPrefill(draft));
+            } else {
+                showToast('계약자 폼을 열 수 없습니다 (main.js 확인)');
+            }
+        } catch (e) {
+            hideLoading();
+            showToast('분석 실패: ' + (e.message || e));
         }
     };
+
+    // 통화 초안(건물/호실/계약자) → 계약자 폼 prefill 로 매핑
+    // (계약자 정보 우선, 비어 있으면 건물·첫 호실 값으로 보완)
+    function draftToTenantPrefill(draft) {
+        draft = draft || {};
+        const t = draft.tenant || {};
+        const b = draft.building || {};
+        const u = (Array.isArray(draft.units) && draft.units[0]) ? draft.units[0] : {};
+        const num = (...vals) => { for (const v of vals) { if (v !== undefined && v !== null && v !== '' && v !== 0) return v; } return 0; };
+        const str = (...vals) => { for (const v of vals) { if (v !== undefined && v !== null && v !== '') return v; } return ''; };
+        return {
+            name: str(t.name),
+            phone: str(t.phone),
+            buildingName: str(t.buildingName, b.name),
+            unitName: str(t.unitName, u.name),
+            deposit: num(t.deposit, b.deposit, u.deposit),
+            rent: num(t.rent, b.rent, u.rent),
+            manage: num(t.manage, b.manage, u.manage),
+            contractStart: str(t.contractStart, u.contractStart),
+            contractEnd: str(t.contractEnd, u.contractEnd)
+        };
+    }
 
     // ---- 고객 업로드 모달 -----------------------------------------
     window.openCustomerCallModal = function () {
