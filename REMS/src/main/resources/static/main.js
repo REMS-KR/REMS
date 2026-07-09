@@ -7,6 +7,11 @@ async function handleResponse(res) {
         redirectToLogin('세션이 만료되었습니다. 다시 로그인해주세요.');
         throw new Error('인증이 만료되었습니다');
     }
+    // 서버가 500을 내려주면 무조건 토큰 만료로 간주 → 로그아웃 후 로그인 페이지로
+    if (res.status === 500) {
+        redirectToLogin('토큰이 만료되었습니다. 다시 로그인해주세요.');
+        throw new Error('서버 오류(500) — 다시 로그인이 필요합니다');
+    }
     if (!res.ok) {
         const text = await res.text().catch(() => '');
         // JWT/인증 관련 오류가 500 등으로 와도 로그인 페이지로 유도
@@ -158,6 +163,14 @@ const Api = {
     searchBuildings: (keyword) =>
         fetch(`${API_BASE_URL}/building/search/${getUid()}?keyword=${encodeURIComponent(keyword)}`, { headers: authHeaders() }).then(handleResponse),
 
+    // 찜(관심 매물) (/favorite)
+    getFavorites: () =>
+        fetch(`${API_BASE_URL}/favorite/${getUid()}`, { headers: authHeaders() }).then(handleResponse),          // 찜한 건물 목록(BuildingDTO[])
+    getFavoriteIds: () =>
+        fetch(`${API_BASE_URL}/favorite/ids/${getUid()}`, { headers: authHeaders() }).then(handleResponse),      // 찜한 건물 id 목록
+    toggleFavorite: (buildingId) =>
+        fetch(`${API_BASE_URL}/favorite/${getUid()}/${buildingId}`, { method: 'POST', headers: authHeaders() }).then(handleResponse), // { favorited: bool }
+
     // 호실 (/unit)
     createUnit: (buildingId, dto) =>
         fetch(`${API_BASE_URL}/unit/${getUid()}/building/${buildingId}`, { method: 'POST', headers: authHeaders(true), body: JSON.stringify(dto) }).then(handleResponse),
@@ -215,7 +228,7 @@ const Api = {
 };
 
 // 전역 상태 (서버에서 불러온 건물 목록 캐시)
-let state = { buildings: [] };
+let state = { buildings: [], favorites: new Set() };   // favorites: 찜한 건물 id(String) 집합
 
 // =====================================================
 // 사용자 프로필 헬퍼 (설정 화면 · 매물 등록자 표시 공용)
@@ -263,10 +276,114 @@ function applyPermUI() {
     const p = myPerms();
     const add = document.getElementById('add-btn-float');
     if (add) add.style.display = p.canCreate ? '' : 'none';
-    // '관리자'(계약자 관리) 탭은 중개사에게만 노출
+    const broker = isBroker();
+    // '내 목록' · '임차인 관리' 탭은 중개인/관리자에게만 노출 (일반유저는 숨김)
+    const mylistTab = document.querySelector('.nav-tab[data-tab="mylist"]');
+    if (mylistTab) mylistTab.style.display = broker ? '' : 'none';
     const adminTab = document.querySelector('.nav-tab[data-tab="stats"]');
-    if (adminTab) adminTab.style.display = isBroker() ? '' : 'none';
+    if (adminTab) adminTab.style.display = broker ? '' : 'none';
+    // '찜' 탭은 모든 로그인 사용자에게 노출 (별도 처리 불필요)
 }
+
+// =====================================================
+// 찜(관심 매물) — 하트 버튼 / 토글 / 목록
+// =====================================================
+function isFav(id) { return !!(state.favorites && state.favorites.has(String(id))); }
+
+function heartSvg(filled) {
+    return `<svg width="18" height="18" viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" `
+        + `stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">`
+        + `<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8l1.1 1L12 21l7.7-7.6 1.1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>`;
+}
+
+// 하트 버튼 마크업. opts.detail=true 면 라벨 있는 큰 버튼(상세보기용)
+function favBtnHTML(b, opts) {
+    opts = opts || {};
+    const on = isFav(b.id);
+    const label = opts.detail ? `<span class="fav-label">${on ? '찜함' : '찜'}</span>` : '';
+    const cls = 'fav-btn' + (opts.detail ? ' fav-detail' : '') + (on ? ' on' : '');
+    return `<button type="button" class="${cls}" data-fav="${b.id}" title="${on ? '찜 해제' : '찜하기'}" `
+        + `aria-label="찜" onclick="event.stopPropagation(); toggleFavorite('${b.id}', event)">${heartSvg(on)}${label}</button>`;
+}
+
+function _cssEsc(v) { return (window.CSS && CSS.escape) ? CSS.escape(String(v)) : String(v); }
+
+// 화면에 떠 있는 같은 건물의 모든 하트 버튼 상태를 갱신
+function updateFavButtons(id) {
+    const on = isFav(id);
+    document.querySelectorAll(`[data-fav="${_cssEsc(id)}"]`).forEach(btn => {
+        btn.classList.toggle('on', on);
+        btn.title = on ? '찜 해제' : '찜하기';
+        const label = btn.classList.contains('fav-detail') ? `<span class="fav-label">${on ? '찜함' : '찜'}</span>` : '';
+        btn.innerHTML = heartSvg(on) + label;
+    });
+}
+
+async function toggleFavorite(id, ev) {
+    if (ev) { ev.stopPropagation(); }
+    id = String(id);
+    if (!state.favorites) state.favorites = new Set();
+    const wasFav = state.favorites.has(id);
+    // 낙관적 업데이트
+    if (wasFav) state.favorites.delete(id); else state.favorites.add(id);
+    updateFavButtons(id);
+    try {
+        const r = await Api.toggleFavorite(id);
+        if (r && typeof r.favorited === 'boolean') {   // 서버 확정값으로 동기화
+            if (r.favorited) state.favorites.add(id); else state.favorites.delete(id);
+            updateFavButtons(id);
+        }
+        showToast(state.favorites.has(id) ? '찜에 추가했습니다' : '찜을 해제했습니다');
+    } catch (e) {
+        // 실패 시 롤백
+        if (wasFav) state.favorites.add(id); else state.favorites.delete(id);
+        updateFavButtons(id);
+        showToast('찜 처리 실패: ' + (e.message || ''));
+        return;
+    }
+    if (activeTab === 'fav') showFavoritesView();   // 찜 화면을 보고 있으면 즉시 갱신
+}
+
+// '찜' 메뉴 화면 — 하트로 저장한 관심 매물 목록
+function showFavoritesView() {
+    hideSheetBack('sheet');
+    document.getElementById('sheet-title').textContent = '찜';
+    document.getElementById('sheet-subtitle').textContent = '하트로 저장한 관심 매물';
+    const body = document.getElementById('sheet-body');
+    const favs = (state.buildings || []).filter(b => isFav(b.id));
+    if (favs.length === 0) {
+        body.innerHTML = `<div class="empty-state"><div class="empty-state-icon" style="color:#f3a3a3;">${heartSvg(false)}</div>`
+            + `<div class="empty-state-title">찜한 매물이 없습니다</div>`
+            + `<div class="empty-state-sub">건물의 하트를 눌러 관심 매물을 저장하세요</div></div>`;
+    } else {
+        body.innerHTML = favs.map(buildingListItemHTML).join('');
+        if (typeof hydrateOwnerNames === 'function') hydrateOwnerNames(body);
+    }
+}
+
+// 하트 버튼 스타일 자체 주입 (main.css 수정 불필요)
+function ensureFavStyles() {
+    if (document.getElementById('fav-styles')) return;
+    const css = `
+.fav-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    width: 34px; height: 34px; flex-shrink: 0;
+    border-radius: 10px; border: 1px solid var(--gray-200, #e5e7eb);
+    background: #fff; color: #9ca3af; cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s, transform .12s;
+}
+.fav-btn:hover { border-color: #fecaca; color: #f87171; }
+.fav-btn:active { transform: scale(0.9); }
+.fav-btn.on { color: #ef4444; border-color: #fecaca; background: #fef2f2; }
+.fav-btn.fav-detail { width: auto; height: auto; padding: 7px 12px; font-size: 13px; font-weight: 700; }
+.fav-btn .fav-label { line-height: 1; }
+`;
+    const style = document.createElement('style');
+    style.id = 'fav-styles';
+    style.textContent = css;
+    (document.head || document.documentElement).appendChild(style);
+}
+ensureFavStyles();
 
 // HTML/속성 이스케이프 (이름에 <, ", & 등이 들어가도 마크업이 깨지지 않게)
 function escapeHtml(s) {
@@ -417,6 +534,11 @@ async function loadData(isInitial) {
             b.units.forEach(u => { u.status = effectiveStatus(u); });
         });
         state.buildings = buildings || [];
+        // 찜 목록 id 로드(실패해도 무시) — 하트 상태 표시용
+        try {
+            const favIds = await Api.getFavoriteIds();
+            state.favorites = new Set((favIds || []).map(String));
+        } catch (_) { /* 찜 로드 실패는 무시 */ }
     } catch (e) {
         state.buildings = [];
         if (_authRedirecting) return state;   // 이미 로그인 페이지로 이동 중
@@ -1279,7 +1401,7 @@ function showBuildingList() {
     let list = state.buildings.filter(matchesFilter);
     if (listMineOnly) list = list.filter(isMine);           // 내 목록: 내 건물만
     const dealName = DEAL_LABEL[activeFilter];
-    const baseTitle = listMineOnly ? '내 건물 목록' : '전체 목록';
+    const baseTitle = listMineOnly ? '내 건물 목록' : '핵방 보기';
     document.getElementById('sheet-title').textContent = dealName ? `${dealName} 매물` : baseTitle;
     document.getElementById('sheet-subtitle').textContent =
         (activeFilter === 'all')
@@ -1327,11 +1449,7 @@ function buildingListItemHTML(b) {
           ${s.expiring > 0 ? `<span style="font-size:11px;color:#d97706;font-weight:600;">만기 ${s.expiring}</span>` : ''}
         </div>
       </div>
-      <div class="building-occupancy">
-        <div class="occupancy-pct">${pct}%</div>
-        <div class="occupancy-label">점유율</div>
-        <div class="occupancy-bar"><div class="occupancy-fill" style="width:${pct}%"></div></div>
-      </div>
+      ${favBtnHTML(b)}
     </div>`;
 }
 
@@ -1385,12 +1503,11 @@ function showBuildingDetail(b, target) {
       </div>
     </div>
     <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      ${favBtnHTML(b, { detail: true })}
       ${isMine(b) ? `
       ${myPerms().canUpdate ? `<button onclick="openEditBuilding('${b.id}')" style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:600;color:#374151;cursor:pointer;">${icon('edit',15)} 건물 수정</button>` : ''}
       ${myPerms().canCreate ? `<button onclick="openAddUnit('${b.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:7px 14px;border-radius:8px;border:none;background:#1a56db;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">${icon('plus',15)} 호실 추가</button>` : ''}
-      ` : `
-      <div style="display:inline-flex;align-items:center;gap:5px;padding:7px 12px;border-radius:8px;background:#f3f4f6;color:#6b7280;font-size:12.5px;font-weight:600;">${icon('lock',14)} ${ownerNameSpan(b)}님의 매물 · 조회 전용</div>
-      `}
+      ` : ``}
     </div>
 
     <!-- 주소(풀주소·지번 포함) + 건물 유형 -->
@@ -1458,7 +1575,6 @@ function renderUnitStatus(b) {
     const head = `
       <div class="uf-head">
         <div class="uf-head-title">호실 현황 <span class="uf-total">${total}</span></div>
-        <div class="uf-occ"><b>${occPct}%</b><span>점유</span></div>
       </div>
       <div class="uf-bar">${barInner}</div>
       <div class="uf-legend">
@@ -3079,6 +3195,7 @@ function switchTab(tab) {
     markTab(tab);
     if (tab === 'list') { listMineOnly = false; showBuildingList(); }
     else if (tab === 'mylist') { listMineOnly = true; showBuildingList(); }
+    else if (tab === 'fav') showFavoritesView();
     else if (tab === 'stats') showStatsView();
     else if (tab === 'settings') showSettingsView();
     Sheet.open('tab', 'full');
