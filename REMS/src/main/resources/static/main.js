@@ -343,7 +343,8 @@ async function toggleFavorite(id, ev) {
         showToast('찜 처리 실패: ' + (e.message || ''));
         return;
     }
-    if (activeTab === 'fav') showFavoritesView();   // 찜 화면을 보고 있으면 즉시 갱신
+    // 참고: '찜' 화면에서 해제해도 즉시 목록에서 없애지 않는다(하트만 빈 모양으로 표시).
+    //       실수 방지를 위해 현재 화면엔 그대로 두고, 메뉴를 다시 열 때(switchTab('fav')) 새로고침되며 빠진다.
 }
 
 // '찜' 메뉴 화면 — 하트로 저장한 관심 매물 목록
