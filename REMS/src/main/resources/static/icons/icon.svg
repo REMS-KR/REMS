@@ -1,0 +1,36 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="핵방노트">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#163d9e"/>
+    </linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="9" stdDeviation="10" flood-color="#0a1436" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <!-- 배경 (라운드 사각). 안드로이드 maskable 은 별도 PNG가 풀블리드로 처리됨 -->
+  <rect x="0" y="0" width="512" height="512" rx="116" fill="url(#bg)"/>
+
+  <!-- 건물 카드 = 지도 핀 (흰 실루엣) -->
+  <g filter="url(#sh)">
+    <path d="M128 122
+             a41 41 0 0 1 41 -41 h174 a41 41 0 0 1 41 41 v233 h-102
+             l-26 46 -26 -46 h-102 z" fill="#ffffff"/>
+  </g>
+
+  <!-- 창문 3x3 (임차=초록 / 만기=주황 / 공실=빨강 / 빈방=연회색) -->
+  <g>
+    <rect x="165" y="117" width="55" height="55" rx="14" fill="#16a34a"/>
+    <rect x="229" y="117" width="55" height="55" rx="14" fill="#cedaf0"/>
+    <rect x="293" y="117" width="55" height="55" rx="14" fill="#f59e0b"/>
+
+    <rect x="165" y="181" width="55" height="55" rx="14" fill="#cedaf0"/>
+    <rect x="229" y="181" width="55" height="55" rx="14" fill="#16a34a"/>
+    <rect x="293" y="181" width="55" height="55" rx="14" fill="#cedaf0"/>
+
+    <rect x="165" y="245" width="55" height="55" rx="14" fill="#ef4444"/>
+    <rect x="229" y="245" width="55" height="55" rx="14" fill="#cedaf0"/>
+    <rect x="293" y="245" width="55" height="55" rx="14" fill="#16a34a"/>
+  </g>
+</svg>
