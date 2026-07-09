@@ -27,6 +27,7 @@ public class CustomerService {
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;
     private final UserPermissionRepository userPermissionRepository;
+    private final com.example.REMS.Repository.BuildingRepository buildingRepository;
 
     // 토큰 검증 후 사용자 반환
     private UserEntity getAuthorizedUser(String uid, UserDetails userDetails) {
@@ -102,6 +103,7 @@ public class CustomerService {
         if (e.getOwner() == null || !e.getOwner().getUid().equals(uid)) {
             throw new RuntimeException("본인이 등록한 고객만 수정할 수 있습니다");
         }
+        e.setName(dto.getName());
         e.setSummary(dto.getSummary());
         e.setPhone(dto.getPhone());
         e.setSensitivity(dto.getSensitivity());
@@ -112,6 +114,46 @@ public class CustomerService {
         e.setMeetingDate(dto.getMeetingDate());
         e.setMemo(dto.getMemo());
         logger.info("고객 수정 완료! 작성자: {}, id={}", uid, id);
+        return CustomerDTO.entityToDto(e);
+    }
+
+    // 고객에게 매물(건물) 연결 (본인 고객만)
+    @Transactional
+    public CustomerDTO attachBuilding(String uid, Long id, Long buildingId, UserDetails userDetails) {
+        UserEntity owner = getAuthorizedUser(uid, userDetails);
+        requireBroker(owner);
+        requirePermission(uid, "UPDATE");
+        CustomerEntity e = customerRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("고객을 찾을 수 없습니다"));
+        if (e.getOwner() == null || !e.getOwner().getUid().equals(uid)) {
+            throw new RuntimeException("본인이 등록한 고객만 수정할 수 있습니다");
+        }
+        if (!buildingRepository.existsById(buildingId)) {
+            throw new IllegalArgumentException("매물을 찾을 수 없습니다");
+        }
+        if (e.getBuildingIds() == null) e.setBuildingIds(new java.util.ArrayList<>());
+        if (!e.getBuildingIds().contains(buildingId)) {
+            e.getBuildingIds().add(buildingId);
+        }
+        logger.info("고객({})에 매물({}) 연결! 작성자: {}", id, buildingId, uid);
+        return CustomerDTO.entityToDto(e);
+    }
+
+    // 고객에서 매물(건물) 연결 해제 (본인 고객만)
+    @Transactional
+    public CustomerDTO detachBuilding(String uid, Long id, Long buildingId, UserDetails userDetails) {
+        UserEntity owner = getAuthorizedUser(uid, userDetails);
+        requireBroker(owner);
+        requirePermission(uid, "UPDATE");
+        CustomerEntity e = customerRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("고객을 찾을 수 없습니다"));
+        if (e.getOwner() == null || !e.getOwner().getUid().equals(uid)) {
+            throw new RuntimeException("본인이 등록한 고객만 수정할 수 있습니다");
+        }
+        if (e.getBuildingIds() != null) {
+            e.getBuildingIds().remove(buildingId);
+        }
+        logger.info("고객({})에서 매물({}) 연결 해제! 작성자: {}", id, buildingId, uid);
         return CustomerDTO.entityToDto(e);
     }
 

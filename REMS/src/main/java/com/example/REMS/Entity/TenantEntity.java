@@ -23,6 +23,7 @@ public class TenantEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private String name;            // 이름 (계약자명)
     private String phone;           // 전화번호
     private String buildingName;    // 건물명
     private String unitName;        // 호실

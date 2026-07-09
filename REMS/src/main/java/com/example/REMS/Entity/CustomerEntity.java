@@ -6,6 +6,8 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 고객(리드) 관리 (중개사 전용).
@@ -24,6 +26,8 @@ public class CustomerEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private String name;            // 이름 (고객명)
+
     @Column(length = 1000)
     private String summary;         // 요약 (통화/상담 내용 요약)
     private String phone;           // 전화번호
@@ -36,6 +40,14 @@ public class CustomerEntity {
 
     @Column(length = 1000)
     private String memo;            // 메모
+
+    // 이 고객에게 연결(추천)된 매물 건물 id 목록
+    @ElementCollection
+    @CollectionTable(name = "customer_buildings", joinColumns = @JoinColumn(name = "customer_id"))
+    @OrderColumn(name = "sort_order")
+    @Column(name = "building_id")
+    @Builder.Default
+    private List<Long> buildingIds = new ArrayList<>();
 
     // 작성자(소유자) — users 테이블과 N:1 외래키 (owner_id)
     @ManyToOne(fetch = FetchType.LAZY)

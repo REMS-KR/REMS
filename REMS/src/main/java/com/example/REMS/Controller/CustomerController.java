@@ -45,6 +45,26 @@ public class CustomerController {
         return ResponseEntity.ok(customerService.updateCustomer(uid, id, dto, userDetails));
     }
 
+    // 고객에 매물(건물) 연결
+    @Operation(summary = "고객에 매물 연결 (중개사)")
+    @PostMapping("/{uid}/{id}/building/{buildingId}")
+    public ResponseEntity<CustomerDTO> attachBuilding(@PathVariable("uid") String uid,
+                                                      @PathVariable("id") Long id,
+                                                      @PathVariable("buildingId") Long buildingId,
+                                                      @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(customerService.attachBuilding(uid, id, buildingId, userDetails));
+    }
+
+    // 고객에서 매물(건물) 연결 해제
+    @Operation(summary = "고객 매물 연결 해제 (중개사)")
+    @DeleteMapping("/{uid}/{id}/building/{buildingId}")
+    public ResponseEntity<CustomerDTO> detachBuilding(@PathVariable("uid") String uid,
+                                                      @PathVariable("id") Long id,
+                                                      @PathVariable("buildingId") Long buildingId,
+                                                      @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(customerService.detachBuilding(uid, id, buildingId, userDetails));
+    }
+
     // 고객 삭제
     @Operation(summary = "고객 삭제 (중개사)")
     @DeleteMapping("/{uid}/{id}")

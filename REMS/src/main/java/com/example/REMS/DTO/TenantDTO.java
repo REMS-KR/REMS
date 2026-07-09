@@ -11,6 +11,7 @@ import lombok.*;
 @Builder
 public class TenantDTO {
     private Long id;
+    private String name;            // 이름 (계약자명)
     private String phone;
     private String buildingName;
     private String unitName;
@@ -23,25 +24,28 @@ public class TenantDTO {
     private Long createdAt;         // 등록 일시(epoch millis)
 
     public static TenantDTO entityToDto(TenantEntity e) {
-        return new TenantDTO(
-                e.getId(),
-                e.getPhone(),
-                e.getBuildingName(),
-                e.getUnitName(),
-                e.getDeposit(),
-                e.getRent(),
-                e.getManage(),
-                e.getContractStart(),
-                e.getContractEnd(),
-                e.getOwner() != null ? e.getOwner().getUid() : null,
-                e.getCreatedAt() != null
+        return TenantDTO.builder()
+                .id(e.getId())
+                .name(e.getName())
+                .phone(e.getPhone())
+                .buildingName(e.getBuildingName())
+                .unitName(e.getUnitName())
+                .deposit(e.getDeposit())
+                .rent(e.getRent())
+                .manage(e.getManage())
+                .contractStart(e.getContractStart())
+                .contractEnd(e.getContractEnd())
+                .ownerUid(e.getOwner() != null ? e.getOwner().getUid() : null)
+                .createdAt(e.getCreatedAt() != null
                         ? e.getCreatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
-                        : null);
+                        : null)
+                .build();
     }
 
     public TenantEntity dtoToEntity(UserEntity owner) {
         return TenantEntity.builder()
                 .id(id)
+                .name(name)
                 .phone(phone)
                 .buildingName(buildingName)
                 .unitName(unitName)

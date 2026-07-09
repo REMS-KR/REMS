@@ -220,6 +220,10 @@ const Api = {
         fetch(`${API_BASE_URL}/customer/${getUid()}/${id}`, { method: 'PUT', headers: authHeaders(true), body: JSON.stringify(dto) }).then(handleResponse),
     deleteCustomer: (id) =>
         fetch(`${API_BASE_URL}/customer/${getUid()}/${id}`, { method: 'DELETE', headers: authHeaders() }).then(handleResponse),
+    attachCustomerBuilding: (id, buildingId) =>
+        fetch(`${API_BASE_URL}/customer/${getUid()}/${id}/building/${buildingId}`, { method: 'POST', headers: authHeaders() }).then(handleResponse),
+    detachCustomerBuilding: (id, buildingId) =>
+        fetch(`${API_BASE_URL}/customer/${getUid()}/${id}/building/${buildingId}`, { method: 'DELETE', headers: authHeaders() }).then(handleResponse),
 
     // 장소 검색 (/api/search/place) — 네이버 지역검색 프록시. 지도 중심(lat/lng)을 주면 가까운 순으로 정렬됨
     searchPlace: (query, lat, lng) => {
@@ -1158,6 +1162,38 @@ html.mode-web #detail-panel.open {
 }
 /* 상세 패널이 열리면 지도 좌측 컨트롤을 패널 오른쪽으로 밀어 가리지 않게 */
 html.mode-web #app.web-detail-open .map-float-controls { left: calc(var(--web-panel-w) + 18px); }
+
+/* ── 좌측 목록 패널 접기/펼치기 토글 (네이버 부동산 스타일) ── */
+html.mode-web #bottom-sheet { transition: transform .34s cubic-bezier(0.32,0.72,0,1); }
+html.mode-web #map-wrap { transition: left .34s cubic-bezier(0.32,0.72,0,1); }
+#web-panel-toggle { display: none; }
+html.mode-web #web-panel-toggle {
+    display: flex; align-items: center; justify-content: center;
+    position: absolute;
+    top: calc(50% + (var(--web-header-h) / 2));
+    left: calc(var(--web-rail-w) + var(--web-panel-w));
+    transform: translate(-50%, -50%);
+    width: 22px; height: 48px;
+    background: #fff; color: var(--gray-500, #6b7280);
+    border: 1px solid var(--gray-200, #e5e7eb); border-left: none;
+    border-radius: 0 9px 9px 0;
+    box-shadow: 3px 0 8px rgba(17,24,39,0.08);
+    cursor: pointer; z-index: 210;
+    transition: left .34s cubic-bezier(0.32,0.72,0,1), opacity .2s ease, color .15s, background .15s;
+}
+html.mode-web #web-panel-toggle:hover { color: var(--blue, #1a56db); background: #f8faff; }
+html.mode-web #web-panel-toggle svg { transition: transform .34s cubic-bezier(0.32,0.72,0,1); }
+/* 접힌 상태: 목록 패널 숨김 + 지도 왼쪽으로 확장 + 토글은 지도 왼쪽 끝으로 + 화살표 반전 */
+/* (모바일 Sheet 가 웹에서도 인라인 transform 을 걸므로 !important 로 우선 적용) */
+html.mode-web #app.web-panel-collapsed #bottom-sheet {
+    transform: translateX(-100%) !important;
+    transition: transform .34s cubic-bezier(0.32,0.72,0,1) !important;
+}
+html.mode-web #app.web-panel-collapsed #map-wrap { left: var(--web-rail-w); }
+html.mode-web #app.web-panel-collapsed #web-panel-toggle { left: var(--web-rail-w); }
+html.mode-web #app.web-panel-collapsed #web-panel-toggle svg { transform: rotate(180deg); }
+/* 상세 패널이 열려 있을 땐 토글 숨김(겹침 방지) */
+html.mode-web #app.web-detail-open #web-panel-toggle { opacity: 0; pointer-events: none; }
 `;
     const style = document.createElement('style');
     style.id = 'web-detail-styles';
@@ -1204,14 +1240,42 @@ function hideSheetBack(prefix) {
     if (back) back.style.display = 'none';
 }
 
+// 웹 좌측 패널 접기/펼치기 토글 버튼 생성 (1회)
+function ensureWebPanelToggle() {
+    if (document.getElementById('web-panel-toggle')) return;
+    const app = document.getElementById('app');
+    if (!app) return;
+    const btn = document.createElement('button');
+    btn.id = 'web-panel-toggle';
+    btn.type = 'button';
+    btn.title = '목록 접기/펼치기';
+    btn.setAttribute('aria-label', '목록 접기/펼치기');
+    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>';
+    btn.onclick = toggleWebPanel;
+    app.appendChild(btn);
+}
+
+function toggleWebPanel() {
+    const app = document.getElementById('app');
+    if (!app) return;
+    const collapsing = !app.classList.contains('web-panel-collapsed');
+    if (collapsing) closeWebDetail();          // 전체 지도 보기 → 열린 상세 패널 닫기
+    app.classList.toggle('web-panel-collapsed');
+    // 지도 영역 크기가 바뀌므로 네이버 지도 리사이즈 (전환 애니메이션 후)
+    setTimeout(() => {
+        try { if (typeof naver !== 'undefined' && typeof map !== 'undefined' && map) naver.maps.Event.trigger(map, 'resize'); } catch (_) {}
+    }, 360);
+}
+
 // 웹: 오른쪽 상세 패널을 채우고 슬라이드인
 function openWebDetail(b) {
     ensureWebDetailStyles();
     ensureDetailPanel();
+    const app = document.getElementById('app');
+    if (app) app.classList.remove('web-panel-collapsed');   // 접혀 있었으면 펼쳐서 정상 배치로
     showBuildingDetail(b, 'detail');
     const panel = document.getElementById('detail-panel');
     if (panel) panel.classList.add('open');
-    const app = document.getElementById('app');
     if (app) app.classList.add('web-detail-open');
     const db = document.getElementById('detail-body');
     if (db) db.scrollTop = 0;
@@ -1238,6 +1302,7 @@ function openBuildingDetail(b) {
 
 // 로드 시 스타일 미리 주입(모바일 '목록' 버튼 스타일 포함)
 ensureWebDetailStyles();
+ensureWebPanelToggle();
 
 function selectBuilding(id) {
     if (!myPerms().canRead) { showToast('조회 권한이 없습니다'); return; }
@@ -2645,7 +2710,7 @@ function renderTenantList() {
         const dd = ddayLabel(t.contractEnd);
         return `<div class="tenant-card" onclick="openTenantForm('${t.id}')">
           <div class="tenant-top">
-            <div class="tenant-bldg">${escapeHtml(t.buildingName || '건물 미입력')}${t.unitName ? ` <span class="tenant-unit">${escapeHtml(t.unitName)}</span>` : ''}</div>
+            <div class="tenant-bldg">${t.name ? `<span style="color:#111827;">${escapeHtml(t.name)}</span> · ` : ''}${escapeHtml(t.buildingName || '건물 미입력')}${t.unitName ? ` <span class="tenant-unit">${escapeHtml(t.unitName)}</span>` : ''}</div>
             <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
               ${dd ? `<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:${dd.bg};color:${dd.fg};">${dd.text}</span>` : ''}
               <span class="tenant-phone">${icon('phone', 13)} ${escapeHtml(t.phone || '-')}</span>
@@ -2670,6 +2735,7 @@ function openTenantForm(id) {
         <input id="${fid}" class="form-input" type="${type || 'text'}" placeholder="${ph || ''}" value="${val != null ? escapeHtml(String(val)) : ''}">
       </div>`;
     document.getElementById('modal-body').innerHTML = `
+      ${f('이름', 'tf-name', t ? t.name : '', '예: 홍길동')}
       ${f('전화번호', 'tf-phone', t ? t.phone : '', '010-0000-0000', 'tel')}
       ${f('건물명', 'tf-bldg', t ? t.buildingName : '', '예: 강남빌딩')}
       ${f('호실', 'tf-unit', t ? t.unitName : '', '예: 201호')}
@@ -2697,6 +2763,7 @@ async function saveTenant(id) {
     const buildingName = document.getElementById('tf-bldg').value.trim();
     if (!phone && !buildingName) { showToast('전화번호 또는 건물명을 입력하세요'); return; }
     const dto = {
+        name: document.getElementById('tf-name').value.trim(),
         phone,
         buildingName,
         unitName: document.getElementById('tf-unit').value.trim(),
@@ -2789,16 +2856,25 @@ function renderCustomerList() {
     }
     box.innerHTML = _customers.map(c => {
         const s = c.sensitivity && CUST_SENS[c.sensitivity];
-        let title = (c.summary && c.summary.trim()) ? c.summary.trim() : (c.location || c.phone || '고객');
+        const hasName = c.name && c.name.trim();
+        let title = hasName ? c.name.trim() : ((c.summary && c.summary.trim()) ? c.summary.trim() : (c.location || c.phone || '고객'));
         if (title.length > 60) title = title.slice(0, 60) + '…';
         const bits = [];
+        if (hasName && c.summary && c.summary.trim()) {
+            let sm = c.summary.trim(); if (sm.length > 40) sm = sm.slice(0, 40) + '…';
+            bits.push(escapeHtml(sm));
+        }
         if (c.amount) bits.push(escapeHtml(c.amount));
         if (c.location) bits.push(escapeHtml(c.location));
         if (c.moveInDate) bits.push('입주 ' + escapeHtml(c.moveInDate));
+        const linkCnt = (c.buildingIds || []).length;
         return `<div class="tenant-card" onclick="openCustomerForm('${c.id}')">
           <div class="tenant-top">
             <div class="tenant-bldg" style="line-height:1.5;">${escapeHtml(title)}</div>
-            ${s ? `<span style="flex-shrink:0;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:${s.bg};color:${s.fg};">감도 ${s.label}</span>` : ''}
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+              ${linkCnt ? `<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:#e0edff;color:#1e40af;">매물 ${linkCnt}</span>` : ''}
+              ${s ? `<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:${s.bg};color:${s.fg};">감도 ${s.label}</span>` : ''}
+            </div>
           </div>
           <div class="tenant-meta">
             <span class="tenant-phone">${icon('phone', 13)} ${escapeHtml(c.phone || '-')}</span>
@@ -2818,6 +2894,10 @@ function openCustomerForm(id, prefill) {
     const sens = (c && c.sensitivity) ? c.sensitivity : '';
     const sBtn = (key, label) => `<button type="button" onclick="cfSetSens('${key}')" data-sens="${key}" class="cf-sens-btn" style="flex:1;padding:9px 0;border-radius:8px;border:1px solid #e5e7eb;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;${sens === key ? `background:${CUST_SENS[key].bg};color:${CUST_SENS[key].fg};border-color:${CUST_SENS[key].fg};` : 'background:#fff;color:#6b7280;'}">${label}</button>`;
     document.getElementById('modal-body').innerHTML = `
+      <div class="form-group">
+        <label class="form-label">이름</label>
+        <input id="cf-name" class="form-input" type="text" placeholder="예: 홍길동" value="${v('name')}">
+      </div>
       <div class="form-group">
         <label class="form-label">요약</label>
         <textarea id="cf-summary" class="form-textarea" style="min-height:70px;" placeholder="고객 니즈 요약">${v('summary')}</textarea>
@@ -2846,6 +2926,12 @@ function openCustomerForm(id, prefill) {
       <div class="form-group"><label class="form-label">메모</label>
         <textarea id="cf-memo" class="form-textarea" style="min-height:60px;" placeholder="특이사항">${v('memo')}</textarea>
       </div>
+      ${isEdit ? `
+      <div class="form-group">
+        <label class="form-label">연결된 매물</label>
+        <div id="cf-buildings">${custBuildingsHTML(c)}</div>
+        <button type="button" onclick="openCustomerBuildingPicker('${c.id}')" class="btn-secondary" style="margin-top:8px;width:100%;display:inline-flex;align-items:center;justify-content:center;gap:5px;">${icon('plus', 15)} ${escapeHtml(((c && c.name && c.name.trim()) ? c.name.trim() : '고객'))}님에게 매물 추가하기</button>
+      </div>` : ''}
     `;
     document.getElementById('modal-footer').innerHTML = `
       ${isEdit && myPerms().canDelete ? `<button class="btn-danger" onclick="deleteCustomer('${c.id}')">삭제</button>` : ''}
@@ -2870,6 +2956,7 @@ async function saveCustomer(id) {
     if (_isSubmitting) return;
     const g = fid => (document.getElementById(fid) ? document.getElementById(fid).value.trim() : '');
     const dto = {
+        name: g('cf-name'),
         summary: g('cf-summary'),
         sensitivity: g('cf-sens') || null,
         phone: g('cf-phone'),
@@ -2906,6 +2993,106 @@ async function deleteCustomer(id) {
         showToast('고객이 삭제되었습니다');
     } catch (e) {
         showToast('삭제 실패: ' + e.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+// ===== 고객 ↔ 매물(건물) 연결 =====
+// 고객 상세(수정 폼)의 '연결된 매물' 목록 마크업
+function custBuildingsHTML(c) {
+    const ids = (c && c.buildingIds) || [];
+    if (!ids.length) return `<div style="font-size:12.5px;color:#9ca3af;padding:6px 2px;">연결된 매물이 없습니다</div>`;
+    return ids.map(bid => {
+        const b = (state.buildings || []).find(x => String(x.id) === String(bid));
+        const nm = b ? (b.name || b.address || ('매물 #' + bid)) : ('삭제된 매물 #' + bid);
+        const addr = b ? (b.address || '') : '';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #eef1f5;border-radius:9px;margin-bottom:6px;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(nm)}</div>
+            ${addr ? `<div style="font-size:11.5px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(addr)}</div>` : ''}
+          </div>
+          <button type="button" onclick="detachCustomerBuilding('${c.id}','${bid}')" title="연결 해제" style="flex-shrink:0;border:none;background:#fef2f2;color:#ef4444;width:28px;height:28px;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;">${icon('close', 14)}</button>
+        </div>`;
+    }).join('');
+}
+
+// 로컬 캐시(_customers) 갱신
+function updateCustomerCache(dto) {
+    if (!dto) return;
+    dto.id = String(dto.id);
+    const i = _customers.findIndex(x => x.id === dto.id);
+    if (i >= 0) _customers[i] = dto; else _customers.push(dto);
+}
+
+// 매물 선택 모달 (고객에게 연결할 건물 고르기)
+function openCustomerBuildingPicker(customerId) {
+    const c = _customers.find(x => x.id === String(customerId));
+    const cname = (c && c.name && c.name.trim()) ? c.name.trim() : '고객';
+    const linked = new Set(((c && c.buildingIds) || []).map(String));
+    document.getElementById('modal-title').textContent = `${cname}님에게 매물 추가`;
+
+    const all = (state.buildings || []);
+    const rows = all.map(b => {
+        const already = linked.has(String(b.id));
+        const nm = b.name || b.address || ('매물 #' + b.id);
+        const s = ((b.name || '') + ' ' + (b.address || '')).toLowerCase();
+        return `<div class="cust-pick-row" data-s="${escapeHtml(s)}" ${already ? '' : `onclick="attachCustomerBuilding('${customerId}','${b.id}')"`}
+             style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #eef1f5;border-radius:9px;margin-bottom:6px;${already ? 'opacity:.55;' : 'cursor:pointer;'}">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(nm)}</div>
+            ${b.address ? `<div style="font-size:11.5px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(b.address)}</div>` : ''}
+          </div>
+          <span style="flex-shrink:0;font-size:12px;font-weight:800;color:${already ? '#9ca3af' : '#1a56db'};">${already ? '연결됨' : '추가'}</span>
+        </div>`;
+    }).join('');
+
+    document.getElementById('modal-body').innerHTML = `
+      <div class="form-group" style="margin-bottom:10px;">
+        <input id="cust-pick-search" class="form-input" type="text" placeholder="건물명·주소 검색" oninput="filterCustPicker()">
+      </div>
+      <div id="cust-pick-list">${rows || `<div style="padding:20px;text-align:center;color:#9ca3af;font-size:13px;">등록된 매물이 없습니다</div>`}</div>
+    `;
+    document.getElementById('modal-footer').innerHTML = `
+      <button class="btn-secondary" onclick="openCustomerForm('${customerId}')">← 뒤로</button>
+    `;
+    showModal();
+}
+
+function filterCustPicker() {
+    const q = (document.getElementById('cust-pick-search')?.value || '').trim().toLowerCase();
+    document.querySelectorAll('#cust-pick-list .cust-pick-row').forEach(r => {
+        r.style.display = (!q || (r.dataset.s || '').includes(q)) ? '' : 'none';
+    });
+}
+
+async function attachCustomerBuilding(customerId, buildingId) {
+    if (_isSubmitting) return;
+    showLoading('매물을 연결하는 중…');
+    try {
+        const updated = await Api.attachCustomerBuilding(customerId, buildingId);
+        updateCustomerCache(updated);
+        if (document.getElementById('customer-list')) renderCustomerList();
+        showToast('매물을 연결했습니다');
+        openCustomerForm(String(customerId));   // 고객 상세로 복귀(갱신된 목록 반영)
+    } catch (e) {
+        showToast('연결 실패: ' + (e.message || ''));
+    } finally {
+        hideLoading();
+    }
+}
+
+async function detachCustomerBuilding(customerId, buildingId) {
+    if (_isSubmitting) return;
+    showLoading('연결을 해제하는 중…');
+    try {
+        const updated = await Api.detachCustomerBuilding(customerId, buildingId);
+        updateCustomerCache(updated);
+        if (document.getElementById('customer-list')) renderCustomerList();
+        showToast('매물 연결을 해제했습니다');
+        openCustomerForm(String(customerId));
+    } catch (e) {
+        showToast('해제 실패: ' + (e.message || ''));
     } finally {
         hideLoading();
     }
@@ -3351,7 +3538,7 @@ function markTab(tab) {
 
 function switchTab(tab) {
     if (pickerMode) cancelMapPicker();   // 다른 탭으로 가면 위치 설정 모드 해제
-    if (isWebMode()) closeWebDetail();   // 웹: 탭 이동 시 오른쪽 상세 패널 닫기
+    if (isWebMode()) { closeWebDetail(); document.getElementById('app') && document.getElementById('app').classList.remove('web-panel-collapsed'); }   // 웹: 탭 이동 시 상세 패널 닫고 목록 패널 펼침
     applyPermUI();                       // 권한에 따라 추가 버튼 표시/숨김
 
     if (tab === 'map') {
@@ -3764,8 +3951,16 @@ window.addEventListener('offline', () => showToast('오프라인 모드 — 데�
         return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
             || window.navigator.standalone === true;   // iOS 홈화면 추가 앱
     }
+    // PC(마우스/트랙패드 = 정밀 포인터) 여부 — 있으면 데스크톱으로 간주
+    function hasFinePointer() {
+        return !!(window.matchMedia && window.matchMedia('(pointer: fine)').matches);
+    }
     function isWeb() {
-        return !isStandalone() && window.innerWidth >= WEB_MIN_WIDTH;
+        if (isStandalone()) return false;
+        // PC 는 줌/창 크기와 무관하게 웹 유지(레이아웃이 깨지는 극단적 축소만 앱으로).
+        if (hasFinePointer()) return window.innerWidth >= 640;
+        // 터치 기기(마우스 없음)는 기존처럼 폭 기준.
+        return window.innerWidth >= WEB_MIN_WIDTH;
     }
     function apply() {
         const root = document.documentElement;

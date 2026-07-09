@@ -105,6 +105,7 @@ public class TenantService {
         if (e.getOwner() == null || !e.getOwner().getUid().equals(uid)) {
             throw new RuntimeException("본인이 등록한 계약자만 수정할 수 있습니다");
         }
+        e.setName(dto.getName());
         e.setPhone(dto.getPhone());
         e.setBuildingName(dto.getBuildingName());
         e.setUnitName(dto.getUnitName());
