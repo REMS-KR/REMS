@@ -1307,3 +1307,55 @@ html.mode-web #modal {
 #app.picker-active #call-parse-float { opacity: 0; pointer-events: none; transform: scale(0.85); }
 /* 웹(데스크톱) 레이아웃 — + 버튼 24px 기준 위 */
 html.mode-web #call-parse-float { right: 18px; bottom: 78px; }
+
+/* =====================================================================
+ * 계약자 · 고객 카드 재구성 — main.css 맨 아래에 붙여넣기
+ * (기존 .tenant-card 컨테이너는 그대로 재사용하고, 내부 레이아웃만 교체)
+ * ===================================================================== */
+
+/* 헤드라인 줄: 한줄 요약(좌) + 배지(우) */
+.cust-headline-row {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+}
+.cust-headline {
+    font-size: 14.5px; font-weight: 800; color: var(--gray-900);
+    line-height: 1.45; letter-spacing: -0.2px;
+    display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+    overflow: hidden; text-overflow: ellipsis;
+}
+.cust-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.cust-badge {
+    font-size: 12px; font-weight: 800; padding: 2px 9px;
+    border-radius: 999px; white-space: nowrap;
+}
+.cust-badge-link { background: #e0edff; color: #1e40af; }
+
+/* ② 전화번호 · 이름 (가로 한 줄) */
+.cust-idrow {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 8px; flex-wrap: wrap;
+}
+.cust-phone {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 13px; font-weight: 700; color: var(--gray-700);
+}
+.cust-dot { color: var(--gray-300); font-weight: 700; }
+.cust-name { font-size: 13px; font-weight: 700; color: var(--gray-900); }
+.cust-meeting {
+    margin-left: auto; font-size: 12px; font-weight: 700; color: #1e40af;
+}
+
+/* ③ 요약 전문 */
+.cust-summary {
+    margin-top: 8px; font-size: 12.5px; line-height: 1.6;
+    color: var(--gray-600); white-space: pre-wrap; word-break: break-word;
+}
+
+/* 보조 메타 (금액·위치·입주) */
+.cust-meta {
+    margin-top: 6px; font-size: 11.5px; font-weight: 600; color: var(--gray-400);
+}
+
+/* 계약자 카드 전용 — 가격/기간 정렬 */
+.cust-card .tenant-price { font-size: 13px; font-weight: 800; color: var(--blue); letter-spacing: -0.2px; }
+.cust-tenant-period { margin-left: 8px; font-size: 11.5px; color: var(--gray-400); font-weight: 600; }

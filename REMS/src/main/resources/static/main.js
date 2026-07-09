@@ -2694,6 +2694,12 @@ async function loadTenants() {
     renderTenantList();
 }
 
+// =====================================================
+// 계약자(임차인) 카드 — 고객 카드와 동일한 톤으로 정렬
+//   ① 헤드라인: 건물명 (+호실)
+//   ② 전화번호 · 이름
+//   ③ 보/월/관리 · 계약기간
+// =====================================================
 function renderTenantList() {
     const box = document.getElementById('tenant-list');
     if (!box) return;
@@ -2709,19 +2715,29 @@ function renderTenantList() {
         const priceLine = (t.rent > 0)
             ? `보 ${(t.deposit || 0).toLocaleString()} / 월 ${t.rent.toLocaleString()}`
             : `보증금 ${(t.deposit || 0).toLocaleString()}만`;
+        const price = priceLine + ((t.manage || 0) > 0 ? ` · 관리 ${t.manage}만` : '');
         const period = (t.contractStart || t.contractEnd) ? `${t.contractStart || '?'} ~ ${t.contractEnd || '?'}` : '';
         const dd = ddayLabel(t.contractEnd);
-        return `<div class="tenant-card" onclick="showTenantDetail('${t.id}')">
-          <div class="tenant-top">
-            <div class="tenant-bldg">${t.name ? `<span style="color:#111827;">${escapeHtml(t.name)}</span> · ` : ''}${escapeHtml(t.buildingName || '건물 미입력')}${t.unitName ? ` <span class="tenant-unit">${escapeHtml(t.unitName)}</span>` : ''}</div>
-            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-              ${dd ? `<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:${dd.bg};color:${dd.fg};">${dd.text}</span>` : ''}
-              <span class="tenant-phone">${icon('phone', 13)} ${escapeHtml(t.phone || '-')}</span>
+        const name = (t.name && t.name.trim()) ? t.name.trim() : '';
+
+        // ① 헤드라인: 건물명 (+호실 배지)
+        const headline = `${escapeHtml(t.buildingName || '건물 미입력')}`
+            + (t.unitName ? ` <span class="tenant-unit">${escapeHtml(t.unitName)}</span>` : '');
+
+        return `<div class="tenant-card cust-card" onclick="showTenantDetail('${t.id}')">
+          <div class="cust-headline-row">
+            <div class="cust-headline">${headline}</div>
+            <div class="cust-badges">
+              ${dd ? `<span class="cust-badge" style="background:${dd.bg};color:${dd.fg};">${dd.text}</span>` : ''}
             </div>
           </div>
-          <div class="tenant-meta">
-            <span class="tenant-price">${priceLine}${(t.manage || 0) > 0 ? ` · 관리 ${t.manage}만` : ''}</span>
-            ${period ? `<span class="tenant-period">${escapeHtml(period)}</span>` : ''}
+          <div class="cust-idrow">
+            <span class="cust-phone">${icon('phone', 13)} ${escapeHtml(t.phone || '-')}</span>
+            ${name ? `<span class="cust-dot">·</span><span class="cust-name">${escapeHtml(name)}</span>` : ''}
+          </div>
+          <div class="cust-summary" style="color:var(--gray-700);font-weight:600;">
+            <span class="tenant-price">${price}</span>
+            ${period ? `<span class="cust-tenant-period">${escapeHtml(period)}</span>` : ''}
           </div>
         </div>`;
     }).join('');
@@ -2877,6 +2893,35 @@ async function loadCustomers() {
     renderCustomerList();
 }
 
+/* =====================================================================
+ * 계약자 · 고객 카드 재구성 (main.js 교체용)
+ *
+ * 적용법: main.js 안의 기존 renderCustomerList() / renderTenantList() 함수를
+ *         아래 버전으로 통째로 교체하고, oneLineSummary() 를 근처에 추가하세요.
+ *
+ * 카드 구조 (요청 사항)
+ *   ① 맨 위  : 한줄 요약 (요약에서 정말 필수 내용만 압축)
+ *   ② 그 밑  : 📞 전화번호  ·  이름   (가로 한 줄)
+ *   ③ 그 밑  : 요약 전문 (쭉 표시)
+ *   (+ 우측 상단 배지: 감도 / 연결 매물 수 / D-day)
+ * ===================================================================== */
+
+// 요약에서 "한줄 요약" 추출 — 화자 라벨 제거 → 첫 문장 우선 → 길이 제한
+function oneLineSummary(text, max = 44) {
+    if (!text) return '';
+    let s = String(text)
+        .replace(/^\s*화자\d+\s*[:：]\s*/gm, '') // "화자1:" 라벨 제거
+        .replace(/\s+/g, ' ')
+        .trim();
+    const m = s.match(/^[^.!?。\n]{6,}?[.!?。]/); // 첫 문장이 있으면 우선
+    if (m) s = m[0].trim();
+    if (s.length > max) s = s.slice(0, max).trim() + '…';
+    return s;
+}
+
+// =====================================================
+// 고객(리드) 카드
+// =====================================================
 function renderCustomerList() {
     const box = document.getElementById('customer-list');
     if (!box) return;
@@ -2889,32 +2934,38 @@ function renderCustomerList() {
         return;
     }
     box.innerHTML = _customers.map(c => {
-        const s = c.sensitivity && CUST_SENS[c.sensitivity];
-        const hasName = c.name && c.name.trim();
-        let title = hasName ? c.name.trim() : ((c.summary && c.summary.trim()) ? c.summary.trim() : (c.location || c.phone || '고객'));
-        if (title.length > 60) title = title.slice(0, 60) + '…';
-        const bits = [];
-        if (hasName && c.summary && c.summary.trim()) {
-            let sm = c.summary.trim(); if (sm.length > 40) sm = sm.slice(0, 40) + '…';
-            bits.push(escapeHtml(sm));
-        }
-        if (c.amount) bits.push(escapeHtml(c.amount));
-        if (c.location) bits.push(escapeHtml(c.location));
-        if (c.moveInDate) bits.push('입주 ' + escapeHtml(c.moveInDate));
+        const sens = c.sensitivity && CUST_SENS[c.sensitivity];
+        const name = (c.name && c.name.trim()) ? c.name.trim() : '';
+        const fullSummary = (c.summary && c.summary.trim()) ? c.summary.trim() : '';
+
+        // ① 헤드라인: 요약 한줄 → 없으면 금액/위치/이름 순으로 대체
+        let headline = oneLineSummary(fullSummary);
+        if (!headline) headline = c.amount || c.location || name || '고객';
+        headline = escapeHtml(headline);
+
         const linkCnt = (c.buildingIds || []).length;
-        return `<div class="tenant-card" onclick="showCustomerDetail('${c.id}')">
-          <div class="tenant-top">
-            <div class="tenant-bldg" style="line-height:1.5;">${escapeHtml(title)}</div>
-            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-              ${linkCnt ? `<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:#e0edff;color:#1e40af;">매물 ${linkCnt}</span>` : ''}
-              ${s ? `<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:${s.bg};color:${s.fg};">감도 ${s.label}</span>` : ''}
+
+        // 하단 보조 메타 (요약에 안 담긴 필드들만 가볍게)
+        const metaBits = [];
+        if (c.amount) metaBits.push(escapeHtml(c.amount));
+        if (c.location) metaBits.push(escapeHtml(c.location));
+        if (c.moveInDate) metaBits.push('입주 ' + escapeHtml(c.moveInDate));
+
+        return `<div class="tenant-card cust-card" onclick="showCustomerDetail('${c.id}')">
+          <div class="cust-headline-row">
+            <div class="cust-headline">${headline}</div>
+            <div class="cust-badges">
+              ${linkCnt ? `<span class="cust-badge cust-badge-link">매물 ${linkCnt}</span>` : ''}
+              ${sens ? `<span class="cust-badge" style="background:${sens.bg};color:${sens.fg};">감도 ${sens.label}</span>` : ''}
             </div>
           </div>
-          <div class="tenant-meta">
-            <span class="tenant-phone">${icon('phone', 13)} ${escapeHtml(c.phone || '-')}</span>
-            ${bits.length ? `<span class="tenant-period">${bits.join(' · ')}</span>` : ''}
-            ${c.meetingDate ? `<span style="margin-left:auto;font-size:12px;font-weight:700;color:#1e40af;">미팅 ${escapeHtml(c.meetingDate)}</span>` : ''}
+          <div class="cust-idrow">
+            <span class="cust-phone">${icon('phone', 13)} ${escapeHtml(c.phone || '-')}</span>
+            ${name ? `<span class="cust-dot">·</span><span class="cust-name">${escapeHtml(name)}</span>` : ''}
+            ${c.meetingDate ? `<span class="cust-meeting">미팅 ${escapeHtml(c.meetingDate)}</span>` : ''}
           </div>
+          ${fullSummary ? `<div class="cust-summary">${escapeHtml(fullSummary)}</div>` : ''}
+          ${metaBits.length ? `<div class="cust-meta">${metaBits.join(' · ')}</div>` : ''}
         </div>`;
     }).join('');
 }
