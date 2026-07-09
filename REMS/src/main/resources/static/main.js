@@ -2964,7 +2964,6 @@ function renderCustomerList() {
             ${name ? `<span class="cust-dot">·</span><span class="cust-name">${escapeHtml(name)}</span>` : ''}
             ${c.meetingDate ? `<span class="cust-meeting">미팅 ${escapeHtml(c.meetingDate)}</span>` : ''}
           </div>
-          ${fullSummary ? `<div class="cust-summary">${escapeHtml(fullSummary)}</div>` : ''}
           ${metaBits.length ? `<div class="cust-meta">${metaBits.join(' · ')}</div>` : ''}
         </div>`;
     }).join('');
