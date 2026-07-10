@@ -36,6 +36,9 @@ public class UserEntity implements UserDetails {
     private String agencyAddress;  // 공인중개사사무소 주소
     // [E] edit by smsong
 
+    // 사무소 공유 코드 — 같은 코드를 가진 중개사끼리 매물을 공유(co-관리)한다. null 이면 미소속.
+    private String officeCode;
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         // 사용자 권한 설정, 필요에 따라 변경할 것

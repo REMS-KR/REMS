@@ -204,6 +204,16 @@ const Api = {
     updatePermission: (targetId, dto) =>
         fetch(`${API_BASE_URL}/user/admin/permissions/${getUid()}/${targetId}`, { method: 'PUT', headers: authHeaders(true), body: JSON.stringify(dto) }).then(handleResponse),
 
+    // 사무소 공유(같은 코드 = 매물 공유 그룹)
+    getOffice: () =>
+        fetch(`${API_BASE_URL}/user/office/${getUid()}`, { headers: authHeaders() }).then(handleResponse),
+    createOffice: () =>
+        fetch(`${API_BASE_URL}/user/office/${getUid()}`, { method: 'POST', headers: authHeaders() }).then(handleResponse),
+    joinOffice: (code) =>
+        fetch(`${API_BASE_URL}/user/office/${getUid()}/join`, { method: 'POST', headers: authHeaders(true), body: JSON.stringify({ code }) }).then(handleResponse),
+    leaveOffice: () =>
+        fetch(`${API_BASE_URL}/user/office/${getUid()}`, { method: 'DELETE', headers: authHeaders() }).then(handleResponse),
+
     // 계약자·임차인 관리 (중개사 전용)
     getTenants: () =>
         fetch(`${API_BASE_URL}/tenant/${getUid()}`, { headers: authHeaders() }).then(handleResponse),
@@ -237,7 +247,7 @@ const Api = {
 };
 
 // 전역 상태 (서버에서 불러온 건물 목록 캐시)
-let state = { buildings: [], favorites: new Set() };   // favorites: 찜한 건물 id(String) 집합
+let state = { buildings: [], favorites: new Set(), officeUids: new Set(), officeMembers: [], officeCode: null };   // favorites: 찜한 건물 id / officeUids·officeMembers: 사무소 공유 그룹
 
 // =====================================================
 // 사용자 프로필 헬퍼 (설정 화면 · 매물 등록자 표시 공용)
@@ -278,6 +288,23 @@ async function loadMyPermission() {
     if (!u || !u.uid) { _myPerms = null; return; }
     if (u.uid === ADMIN_UID) { _myPerms = { admin: true, canCreate: true, canRead: true, canUpdate: true, canDelete: true }; return; }
     try { _myPerms = await Api.myPermission(); } catch (_) { /* 실패 시 기본값 유지 */ }
+}
+
+// 사무소 공유 그룹 로드 — 같은 코드를 가진 멤버들의 uid 집합
+async function loadOffice() {
+    state.officeUids = new Set();
+    state.officeCode = null;
+    if (!isBroker()) return;
+    try {
+        const o = await Api.getOffice();
+        applyOfficeState(o);
+    } catch (_) { /* 미소속/실패 시 빈 상태 유지 */ }
+}
+function applyOfficeState(o) {
+    state.officeCode = (o && o.code) ? o.code : null;
+    const members = (o && o.members) || [];
+    state.officeUids = new Set(members.map(m => String(m.uid)));
+    state.officeMembers = members;
 }
 
 // 권한에 따라 전역 UI(건물 추가 버튼 등) 반영
@@ -542,7 +569,9 @@ function myIds() {
 function isMine(obj) {
     const owner = ownerIdOf(obj);
     if (!owner) return false;
-    return myIds().includes(owner);
+    if (myIds().includes(owner)) return true;
+    // 같은 사무소(공유 그룹) 소유 매물도 '내 것'처럼 관리 가능
+    return !!(state.officeUids && state.officeUids.has(String(owner)));
 }
 // [E] edit by smsong
 
@@ -566,6 +595,7 @@ async function fetchOwnerProfile(obj) {
 // 서버에서 전체 건물(+호실)을 불러와 state에 저장
 async function loadData(isInitial) {
     if (isInitial) { try { await loadMyPermission(); } catch (_) {} }   // 내 권한 먼저 로드(버튼 게이팅용)
+    if (isInitial) { try { await loadOffice(); } catch (_) {} }         // 사무소 공유 그룹 로드
     try {
         const buildings = await Api.getBuildings();
         // 백엔드 id(Long) -> 문자열로 정규화 (기존 '=== id' 비교 로직 그대로 동작)
@@ -2621,8 +2651,8 @@ let _tenants = [];   // 계약자 목록 캐시
 function showStatsView() {   // (하단 '관리자' 탭 진입점 — 기존 호출부 호환 위해 이름 유지)
     hideSheetBack('sheet');
     const body = document.getElementById('sheet-body');
-    document.getElementById('sheet-title').textContent = '계약자(임차인) · 고객 관리';
-    document.getElementById('sheet-subtitle').textContent = '상담 고객과 임차인 정보를 통합 관리하세요';
+    document.getElementById('sheet-title').textContent = '계약자 · 고객 관리';
+    document.getElementById('sheet-subtitle').textContent = '중개사 전용 · 계약자(임차인)와 고객(리드) 관리';
 
     if (!isBroker()) {
         body.innerHTML = `<div class="empty-state">
@@ -2694,12 +2724,6 @@ async function loadTenants() {
     renderTenantList();
 }
 
-// =====================================================
-// 계약자(임차인) 카드 — 고객 카드와 동일한 톤으로 정렬
-//   ① 헤드라인: 건물명 (+호실)
-//   ② 전화번호 · 이름
-//   ③ 보/월/관리 · 계약기간
-// =====================================================
 function renderTenantList() {
     const box = document.getElementById('tenant-list');
     if (!box) return;
@@ -2715,29 +2739,19 @@ function renderTenantList() {
         const priceLine = (t.rent > 0)
             ? `보 ${(t.deposit || 0).toLocaleString()} / 월 ${t.rent.toLocaleString()}`
             : `보증금 ${(t.deposit || 0).toLocaleString()}만`;
-        const price = priceLine + ((t.manage || 0) > 0 ? ` · 관리 ${t.manage}만` : '');
         const period = (t.contractStart || t.contractEnd) ? `${t.contractStart || '?'} ~ ${t.contractEnd || '?'}` : '';
         const dd = ddayLabel(t.contractEnd);
-        const name = (t.name && t.name.trim()) ? t.name.trim() : '';
-
-        // ① 헤드라인: 건물명 (+호실 배지)
-        const headline = `${escapeHtml(t.buildingName || '건물 미입력')}`
-            + (t.unitName ? ` <span class="tenant-unit">${escapeHtml(t.unitName)}</span>` : '');
-
-        return `<div class="tenant-card cust-card" onclick="showTenantDetail('${t.id}')">
-          <div class="cust-headline-row">
-            <div class="cust-headline">${headline}</div>
-            <div class="cust-badges">
-              ${dd ? `<span class="cust-badge" style="background:${dd.bg};color:${dd.fg};">${dd.text}</span>` : ''}
+        return `<div class="tenant-card" onclick="showTenantDetail('${t.id}')">
+          <div class="tenant-top">
+            <div class="tenant-bldg">${t.name ? `<span style="color:#111827;">${escapeHtml(t.name)}</span> · ` : ''}${escapeHtml(t.buildingName || '건물 미입력')}${t.unitName ? ` <span class="tenant-unit">${escapeHtml(t.unitName)}</span>` : ''}</div>
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+              ${dd ? `<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:${dd.bg};color:${dd.fg};">${dd.text}</span>` : ''}
+              <span class="tenant-phone">${icon('phone', 13)} ${escapeHtml(t.phone || '-')}</span>
             </div>
           </div>
-          <div class="cust-idrow">
-            <span class="cust-phone">${icon('phone', 13)} ${escapeHtml(t.phone || '-')}</span>
-            ${name ? `<span class="cust-dot">·</span><span class="cust-name">${escapeHtml(name)}</span>` : ''}
-          </div>
-          <div class="cust-summary" style="color:var(--gray-700);font-weight:600;">
-            <span class="tenant-price">${price}</span>
-            ${period ? `<span class="cust-tenant-period">${escapeHtml(period)}</span>` : ''}
+          <div class="tenant-meta">
+            <span class="tenant-price">${priceLine}${(t.manage || 0) > 0 ? ` · 관리 ${t.manage}만` : ''}</span>
+            ${period ? `<span class="tenant-period">${escapeHtml(period)}</span>` : ''}
           </div>
         </div>`;
     }).join('');
@@ -2893,35 +2907,6 @@ async function loadCustomers() {
     renderCustomerList();
 }
 
-/* =====================================================================
- * 계약자 · 고객 카드 재구성 (main.js 교체용)
- *
- * 적용법: main.js 안의 기존 renderCustomerList() / renderTenantList() 함수를
- *         아래 버전으로 통째로 교체하고, oneLineSummary() 를 근처에 추가하세요.
- *
- * 카드 구조 (요청 사항)
- *   ① 맨 위  : 한줄 요약 (요약에서 정말 필수 내용만 압축)
- *   ② 그 밑  : 📞 전화번호  ·  이름   (가로 한 줄)
- *   ③ 그 밑  : 요약 전문 (쭉 표시)
- *   (+ 우측 상단 배지: 감도 / 연결 매물 수 / D-day)
- * ===================================================================== */
-
-// 요약에서 "한줄 요약" 추출 — 화자 라벨 제거 → 첫 문장 우선 → 길이 제한
-function oneLineSummary(text, max = 44) {
-    if (!text) return '';
-    let s = String(text)
-        .replace(/^\s*화자\d+\s*[:：]\s*/gm, '') // "화자1:" 라벨 제거
-        .replace(/\s+/g, ' ')
-        .trim();
-    const m = s.match(/^[^.!?。\n]{6,}?[.!?。]/); // 첫 문장이 있으면 우선
-    if (m) s = m[0].trim();
-    if (s.length > max) s = s.slice(0, max).trim() + '…';
-    return s;
-}
-
-// =====================================================
-// 고객(리드) 카드
-// =====================================================
 function renderCustomerList() {
     const box = document.getElementById('customer-list');
     if (!box) return;
@@ -2934,37 +2919,32 @@ function renderCustomerList() {
         return;
     }
     box.innerHTML = _customers.map(c => {
-        const sens = c.sensitivity && CUST_SENS[c.sensitivity];
-        const name = (c.name && c.name.trim()) ? c.name.trim() : '';
-        const fullSummary = (c.summary && c.summary.trim()) ? c.summary.trim() : '';
-
-        // ① 헤드라인: 요약 한줄 → 없으면 금액/위치/이름 순으로 대체
-        let headline = oneLineSummary(fullSummary);
-        if (!headline) headline = c.amount || c.location || name || '고객';
-        headline = escapeHtml(headline);
-
+        const s = c.sensitivity && CUST_SENS[c.sensitivity];
+        const hasName = c.name && c.name.trim();
+        let title = hasName ? c.name.trim() : ((c.summary && c.summary.trim()) ? c.summary.trim() : (c.location || c.phone || '고객'));
+        if (title.length > 60) title = title.slice(0, 60) + '…';
+        const bits = [];
+        if (hasName && c.summary && c.summary.trim()) {
+            let sm = c.summary.trim(); if (sm.length > 40) sm = sm.slice(0, 40) + '…';
+            bits.push(escapeHtml(sm));
+        }
+        if (c.amount) bits.push(escapeHtml(c.amount));
+        if (c.location) bits.push(escapeHtml(c.location));
+        if (c.moveInDate) bits.push('입주 ' + escapeHtml(c.moveInDate));
         const linkCnt = (c.buildingIds || []).length;
-
-        // 하단 보조 메타 (요약에 안 담긴 필드들만 가볍게)
-        const metaBits = [];
-        if (c.amount) metaBits.push(escapeHtml(c.amount));
-        if (c.location) metaBits.push(escapeHtml(c.location));
-        if (c.moveInDate) metaBits.push('입주 ' + escapeHtml(c.moveInDate));
-
-        return `<div class="tenant-card cust-card" onclick="showCustomerDetail('${c.id}')">
-          <div class="cust-headline-row">
-            <div class="cust-headline">${headline}</div>
-            <div class="cust-badges">
-              ${linkCnt ? `<span class="cust-badge cust-badge-link">매물 ${linkCnt}</span>` : ''}
-              ${sens ? `<span class="cust-badge" style="background:${sens.bg};color:${sens.fg};">감도 ${sens.label}</span>` : ''}
+        return `<div class="tenant-card" onclick="showCustomerDetail('${c.id}')">
+          <div class="tenant-top">
+            <div class="tenant-bldg" style="line-height:1.5;">${escapeHtml(title)}</div>
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+              ${linkCnt ? `<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:#e0edff;color:#1e40af;">매물 ${linkCnt}</span>` : ''}
+              ${s ? `<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:${s.bg};color:${s.fg};">감도 ${s.label}</span>` : ''}
             </div>
           </div>
-          <div class="cust-idrow">
-            <span class="cust-phone">${icon('phone', 13)} ${escapeHtml(c.phone || '-')}</span>
-            ${name ? `<span class="cust-dot">·</span><span class="cust-name">${escapeHtml(name)}</span>` : ''}
-            ${c.meetingDate ? `<span class="cust-meeting">미팅 ${escapeHtml(c.meetingDate)}</span>` : ''}
+          <div class="tenant-meta">
+            <span class="tenant-phone">${icon('phone', 13)} ${escapeHtml(c.phone || '-')}</span>
+            ${bits.length ? `<span class="tenant-period">${bits.join(' · ')}</span>` : ''}
+            ${c.meetingDate ? `<span style="margin-left:auto;font-size:12px;font-weight:700;color:#1e40af;">미팅 ${escapeHtml(c.meetingDate)}</span>` : ''}
           </div>
-          ${metaBits.length ? `<div class="cust-meta">${metaBits.join(' · ')}</div>` : ''}
         </div>`;
     }).join('');
 }
@@ -2983,7 +2963,7 @@ function showCustomerDetail(id) {
     document.getElementById('modal-body').innerHTML = `
       ${s ? `<div style="margin-bottom:10px;"><span style="font-size:12px;font-weight:800;padding:3px 11px;border-radius:999px;background:${s.bg};color:${s.fg};">감도 ${s.label}</span></div>` : ''}
       ${row('이름', c.name)}
-      ${c.summary ? `<div style="padding:10px 0;border-bottom:1px solid #f1f3f5;"><div style="color:#6b7280;font-size:13px;margin-bottom:5px;">요약</div><div style="color:#111827;font-size:13px;line-height:1.6;white-space:pre-wrap;">${escapeHtml(c.summary)}</div></div>` : ''}
+      ${c.summary ? `<div style="padding:10px 0;border-bottom:1px solid #f1f3f5;"><div style="color:#6b7280;font-size:13px;margin-bottom:5px;">AI 요약</div><div style="color:#111827;font-size:13px;line-height:1.6;white-space:pre-wrap;">${escapeHtml(c.summary)}</div></div>` : ''}
       ${row('전화번호', c.phone)}
       ${row('금액', c.amount)}
       ${row('위치', c.location)}
@@ -3020,8 +3000,8 @@ function openCustomerForm(id, prefill) {
         <input id="cf-name" class="form-input" type="text" placeholder="예: 홍길동" value="${v('name')}">
       </div>
       <div class="form-group">
-        <label class="form-label">요약</label>
-        <textarea id="cf-summary" class="form-textarea" style="min-height:70px;" placeholder="고객 니즈 요약">${v('summary')}</textarea>
+        <label class="form-label">AI 요약</label>
+        <textarea id="cf-summary" class="form-textarea" style="min-height:70px;" placeholder="AI가 통화에서 정리한 요약 (직접 수정 가능)">${v('summary')}</textarea>
       </div>
       <div class="form-group">
         <label class="form-label">감도 <span style="font-weight:400;color:#9ca3af;">(직접 선택)</span></label>
@@ -3081,7 +3061,7 @@ async function saveCustomer(id) {
         loan: g('cf-loan'),
         memo: g('cf-memo')
     };
-    if (!dto.summary && !dto.phone) { showToast('요약 또는 전화번호를 입력하세요'); return; }
+    if (!dto.summary && !dto.phone) { showToast('AI 요약 또는 전화번호를 입력하세요'); return; }
     showLoading(id ? '고객 정보를 저장하는 중…' : '고객을 등록하는 중…');
     try {
         if (id) await Api.updateCustomer(id, dto);
@@ -3212,6 +3192,89 @@ async function detachCustomerBuilding(customerId, buildingId) {
     }
 }
 
+// =====================================================
+// 사무소 매물 공유 (같은 코드끼리 공유)
+// =====================================================
+function officeCardHTML() {
+    const code = state.officeCode;
+    const members = state.officeMembers || [];
+    const chips = members.length
+        ? members.map(m => `<span style="font-size:12px;font-weight:700;color:#374151;background:#f3f4f6;border-radius:999px;padding:4px 10px;">${escapeHtml(m.name || m.nickname || m.uid)}</span>`).join('')
+        : '<span style="color:#9ca3af;font-size:12.5px;">아직 없음</span>';
+    return `
+    <div style="width:100%;margin:10px 0 2px;padding:14px;border:1px solid #e5e7eb;border-radius:14px;text-align:left;background:#fff;">
+      <div style="font-size:13px;font-weight:800;color:#111827;margin-bottom:8px;display:flex;align-items:center;gap:6px;">${icon('building', 15)} 사무소 매물 공유</div>
+      ${code ? `
+        <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">우리 사무소 코드 · 같은 코드끼리 매물을 함께 관리합니다</div>
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:12px;">
+          <div style="flex:1;font-size:18px;font-weight:800;letter-spacing:3px;color:#1a56db;background:#eef4ff;border-radius:9px;padding:9px 12px;text-align:center;">${escapeHtml(code)}</div>
+          <button class="btn-secondary" style="flex-shrink:0;white-space:nowrap;" onclick="copyOfficeCode()">복사</button>
+        </div>
+        <div style="font-size:12px;color:#6b7280;margin-bottom:6px;">공유 멤버 ${members.length}명</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">${chips}</div>
+        <button class="btn-secondary" style="width:100%;color:#ef4444;" onclick="officeLeave()">사무소 공유 나가기</button>
+      ` : `
+        <div style="font-size:12.5px;color:#6b7280;line-height:1.6;margin-bottom:10px;">같은 사무소 직원끼리 매물을 공유해 함께 관리할 수 있어요. 코드를 만들어 동료에게 알려주거나, 받은 코드로 참여하세요.</div>
+        <button class="btn-primary" style="width:100%;margin-bottom:10px;" onclick="officeGenerate()">우리 사무소 코드 만들기</button>
+        <div style="display:flex;gap:6px;">
+          <input id="office-join-code" class="form-input" type="text" placeholder="사무소 코드 입력" style="flex:1;text-transform:uppercase;">
+          <button class="btn-secondary" style="flex-shrink:0;white-space:nowrap;" onclick="officeJoin()">참여</button>
+        </div>
+      `}
+    </div>`;
+}
+
+function copyOfficeCode() {
+    const code = state.officeCode || '';
+    if (!code) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(() => showToast('코드를 복사했습니다')).catch(() => showToast(code));
+    } else {
+        showToast(code);
+    }
+}
+
+async function officeGenerate() {
+    showLoading('사무소 코드를 생성하는 중…');
+    try {
+        applyOfficeState(await Api.createOffice());
+        showSettingsView();
+        await reloadBuildingsAfterOffice();
+        showToast('사무소 코드가 생성되었습니다');
+    } catch (e) { alert('코드 생성 실패\n\n' + (e.message || '')); }
+    finally { hideLoading(); }
+}
+
+async function officeJoin() {
+    const code = (document.getElementById('office-join-code') && document.getElementById('office-join-code').value || '').trim();
+    if (!code) { showToast('사무소 코드를 입력하세요'); return; }
+    showLoading('사무소에 참여하는 중…');
+    try {
+        applyOfficeState(await Api.joinOffice(code));
+        showSettingsView();
+        await reloadBuildingsAfterOffice();
+        showToast('사무소에 참여했습니다');
+    } catch (e) { alert('참여 실패\n\n' + (e.message || '')); }
+    finally { hideLoading(); }
+}
+
+async function officeLeave() {
+    if (!confirm('사무소 공유에서 나가시겠습니까?\n나가면 동료의 매물이 더 이상 내 것으로 표시되지 않습니다.')) return;
+    showLoading('처리 중…');
+    try {
+        applyOfficeState(await Api.leaveOffice());
+        showSettingsView();
+        await reloadBuildingsAfterOffice();
+        showToast('사무소 공유에서 나갔습니다');
+    } catch (e) { alert('실패\n\n' + (e.message || '')); }
+    finally { hideLoading(); }
+}
+
+// 사무소 변경 후 매물 데이터 새로고침(공실표 공유/‘내 것’ 판정 반영).
+async function reloadBuildingsAfterOffice() {
+    try { if (typeof loadData === 'function') await loadData(false); } catch (_) {}
+}
+
 function showSettingsView() {
     hideSheetBack('sheet');
     document.getElementById('sheet-title').textContent = '내 프로필';
@@ -3238,6 +3301,9 @@ function showSettingsView() {
       <!-- [B] edit by smsong - 내 공인중개사사무소 정보 요약 -->
       ${agencyCardHTML(me) || (isBroker() ? `<div style="margin:6px 0 2px;font-size:12.5px;color:#9ca3af;">공인중개사사무소 정보가 없습니다. ‘내 정보 수정’에서 등록하세요.</div>` : '')}
       <!-- [E] edit by smsong -->
+
+      ${isBroker() ? officeCardHTML() : ''}
+
 
       <input type="file" id="profile-file" accept="image/*" style="display:none" onchange="changeProfilePhoto(event)">
       <div class="profile-actions">

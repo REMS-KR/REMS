@@ -26,6 +26,7 @@ public class UnitService {
     private final BuildingRepository buildingRepository;
     private final UserRepository userRepository;
     private final com.example.REMS.Repository.UserPermissionRepository userPermissionRepository;
+    private final UserService userService;   // 사무소 공유 그룹 판정용
 
     private static final String ADMIN_UID = "4979532269";
 
@@ -63,19 +64,26 @@ public class UnitService {
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다"));
     }
 
-    // 호실 수정/삭제 권한: 작성자 본인만
+    // 호실 수정/삭제 권한: 작성자 본인 또는 같은 사무소(공유 그룹)
     private void checkUnitOwner(UnitEntity unit, String uid) {
-        if (unit.getOwner() == null || !unit.getOwner().getUid().equals(uid)) {
+        if (unit.getOwner() == null) {
             throw new RuntimeException("해당 호실에 대한 권한이 없습니다");
         }
+        String ownerUid = unit.getOwner().getUid();
+        if (ownerUid.equals(uid)) return;
+        if (userService.sameOffice(ownerUid, uid)) return;   // 같은 사무소면 공유(co-관리) 허용
+        throw new RuntimeException("해당 호실에 대한 권한이 없습니다");
     }
 
-    // 호실 추가 권한: 건물 작성자 본인만
+    // 호실 추가 권한: 건물 작성자 본인 또는 같은 사무소(공유 그룹)
     private void checkBuildingOwner(BuildingEntity building, String uid) {
-        if (building == null || building.getOwner() == null
-                || !building.getOwner().getUid().equals(uid)) {
+        if (building == null || building.getOwner() == null) {
             throw new RuntimeException("해당 건물에 대한 권한이 없습니다");
         }
+        String ownerUid = building.getOwner().getUid();
+        if (ownerUid.equals(uid)) return;
+        if (userService.sameOffice(ownerUid, uid)) return;   // 같은 사무소면 공유(co-관리) 허용
+        throw new RuntimeException("해당 건물에 대한 권한이 없습니다");
     }
 
     // 특정 건물에 호실 추가 (작성자 = 토큰의 사용자, 내 건물에만)

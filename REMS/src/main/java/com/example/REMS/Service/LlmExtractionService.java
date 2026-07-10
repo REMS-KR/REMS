@@ -74,6 +74,15 @@ public class LlmExtractionService {
             - 임차인/계약자 개인의 계약 상담이면 tenant 에 채운다.
             [confidence] 각 항목을 얼마나 확신하는지 0.0~1.0.
 
+            [중점 분석 — 특히 정확히 추출할 것]
+            아래 4가지는 통화의 핵심이므로 놓치지 말고 최대한 정확히 추출한다.
+            1) 금액: 보증금/월세/관리비/매매가/전세금 등 모든 금액을 '만원' 정수로 정확히 변환
+               (deposit/rent/manage, dealType 에 맞게). 애매하면 확신도를 낮추되 값은 언급된 대로.
+            2) 위치: 건물 주소·상세주소·지역/동/역 이름을 building.address / detailAddress 에 반영.
+            3) 입주/계약 날짜: 입주 시점, 계약 시작/만료일을 contractStart / contractEnd 에 yyyy-MM-dd 로.
+            4) 대출 상품: 전세대출 가능 여부와 상품명을 jeonseLoanAvailable(true/false) /
+               jeonseLoanType(HUG/HF/SGI/버팀목/LH 등)에 반영. 언급 없으면 null.
+
             [출력 스키마]
             {
               "building": { "name": null, "address": null, "detailAddress": null, "type": null, "dealType": null,
@@ -108,6 +117,15 @@ public class LlmExtractionService {
             - meetingDate(미팅날짜): 방문/미팅 약속일. yyyy-MM-dd 또는 자유 표현. 없으면 null.
             - memo(메모): 위에 안 들어가는 특이사항/요청.
             - sensitivity(감도)는 절대 채우지 말고 항상 null 로 둔다. (중개사가 직접 수기 체크하는 항목)
+
+            [중점 분석 — 특히 정확히 추출할 것]
+            아래 4가지는 상담의 핵심이므로 놓치지 말고 최대한 정확히 추출/요약한다.
+            1) 금액(amount): 예산·희망 보증금/월세/매매가/전세금을 사람이 읽기 쉬운 문자열로 정확히.
+            2) 위치(location): 고객이 원하는 지역/동네/역세권 등을 구체적으로.
+            3) 입주 희망일(moveInDate): 입주 시점을 yyyy-MM-dd 로. 자유표현이면 그대로(예: "3월 초").
+            4) 대출 상품(loan): 언급된 대출 상품/희망(예: 버팀목·디딤돌·보금자리·HUG 전세대출 등)과
+               필요 여부를 구체적으로. 없으면 null.
+            그리고 summary(요약)에는 위 4가지(금액·위치·입주시점·대출)를 우선하여 담는다.
 
             [출력 스키마]
             {

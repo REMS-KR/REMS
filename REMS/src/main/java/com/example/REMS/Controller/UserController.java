@@ -88,6 +88,36 @@ public class UserController {
         return ResponseEntity.ok(userService.getMyPermission(uid, userDetails));
     }
 
+    // ===== 사무소 공유(같은 코드 = 매물 공유 그룹) =====
+    @Operation(summary = "내 사무소 정보(코드+멤버)")
+    @GetMapping("/office/{uid}")
+    public ResponseEntity<Map<String, Object>> getOffice(@PathVariable("uid") String uid,
+                                                         @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(userService.getOffice(uid, userDetails));
+    }
+
+    @Operation(summary = "사무소 코드 생성/조회 (중개사)")
+    @PostMapping("/office/{uid}")
+    public ResponseEntity<Map<String, Object>> createOffice(@PathVariable("uid") String uid,
+                                                            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(userService.createOrGetOfficeCode(uid, userDetails));
+    }
+
+    @Operation(summary = "사무소 코드로 참여 (중개사)")
+    @PostMapping("/office/{uid}/join")
+    public ResponseEntity<Map<String, Object>> joinOffice(@PathVariable("uid") String uid,
+                                                          @RequestBody Map<String, String> body,
+                                                          @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(userService.joinOffice(uid, body.get("code"), userDetails));
+    }
+
+    @Operation(summary = "사무소 나가기")
+    @DeleteMapping("/office/{uid}")
+    public ResponseEntity<Map<String, Object>> leaveOffice(@PathVariable("uid") String uid,
+                                                           @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(userService.leaveOffice(uid, userDetails));
+    }
+
     // 관리자: 전체 유저 권한 목록
     @Operation(summary = "권한 목록 조회 (관리자)")
     @GetMapping("/admin/permissions/{uid}")

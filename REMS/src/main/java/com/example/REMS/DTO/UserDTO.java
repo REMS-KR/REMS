@@ -31,6 +31,9 @@ public class UserDTO {
         private String agencyAddress;
         // [E] edit by smsong
 
+        // 사무소 공유 코드
+        private String officeCode;
+
         public static UserDTO entityToDto(UserEntity userEntity) {
                 return new UserDTO(
                         userEntity.getId(),
@@ -49,13 +52,14 @@ public class UserDTO {
                         // [B] edit by smsong - 공인중개사사무소 필드 매핑
                         userEntity.getAgencyName(),
                         userEntity.getAgencyPhone(),
-                        userEntity.getAgencyAddress());
+                        userEntity.getAgencyAddress(),
                         // [E] edit by smsong
+                        userEntity.getOfficeCode());
         }
 
         public UserEntity dtoToEntity() {
                 // [B] edit by smsong - 공인중개사사무소 필드(agencyName/agencyPhone/agencyAddress) 추가
-                return new UserEntity(id, uid, password, name, age, gender, nickname, address, email, phone, profileURL, provider, likeCount, agencyName, agencyPhone, agencyAddress);
+                return new UserEntity(id, uid, password, name, age, gender, nickname, address, email, phone, profileURL, provider, likeCount, agencyName, agencyPhone, agencyAddress, officeCode);
                 // [E] edit by smsong
         }
 }

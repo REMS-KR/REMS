@@ -37,6 +37,7 @@ public class BuildingService {
     private final BuildingRepository buildingRepository;
     private final UserRepository userRepository;
     private final com.example.REMS.Repository.UserPermissionRepository userPermissionRepository;
+    private final UserService userService;   // 사무소 공유 그룹 판정용
 
     private static final String ADMIN_UID = "4979532269";
 
@@ -81,9 +82,28 @@ public class BuildingService {
     }
 
     private void checkOwner(BuildingEntity building, String uid) {
-        if (building.getOwner() == null || !building.getOwner().getUid().equals(uid)) {
+        if (building.getOwner() == null) {
             throw new RuntimeException("해당 건물에 대한 권한이 없습니다");
         }
+        String ownerUid = building.getOwner().getUid();
+        if (ownerUid.equals(uid)) return;
+        if (userService.sameOffice(ownerUid, uid)) return;   // 같은 사무소면 공유(co-관리) 허용
+        throw new RuntimeException("해당 건물에 대한 권한이 없습니다");
+    }
+
+    // 조회 응답 변환 — 공실표(vacancyURLs)는 소유자 + 같은 사무소 멤버에게만 보인다.
+    private BuildingDTO toDtoShared(BuildingEntity b, java.util.Set<String> allowedOwnerUids) {
+        BuildingDTO dto = BuildingDTO.entityToDto(b);
+        String ownerUid = (b.getOwner() != null) ? b.getOwner().getUid() : null;
+        if (ownerUid == null || !allowedOwnerUids.contains(ownerUid)) {
+            dto.setVacancyURLs(new ArrayList<>());
+        }
+        return dto;
+    }
+
+    // 요청자 기준 "공실표 공개 대상" uid 집합 (본인 + 같은 사무소)
+    private java.util.Set<String> vacancyAllowedUids(String uid) {
+        return new java.util.HashSet<>(userService.officeMemberUids(uid));
     }
 
     // 미디어 파일 1개를 GCS에 업로드하고 공개 URL 반환 (빈 파일이면 null)
@@ -180,8 +200,9 @@ public class BuildingService {
     @Transactional(readOnly = true)
     public List<BuildingDTO> getAllBuildings(String uid, UserDetails userDetails) {
         checkAuth(uid, userDetails);
+        java.util.Set<String> allowed = vacancyAllowedUids(uid);
         List<BuildingDTO> buildings = buildingRepository.findByDeletedAtIsNull().stream()
-                .map(b -> BuildingDTO.entityToDtoForViewer(b, uid))   // 공실표는 소유자에게만
+                .map(b -> toDtoShared(b, allowed))   // 공실표는 소유자+같은 사무소만
                 .collect(Collectors.toList());
         logger.info("전체 건물 {}개 조회 완료! 요청자: {}", buildings.size(), uid);
         return buildings;
@@ -193,22 +214,24 @@ public class BuildingService {
         BuildingEntity buildingEntity = buildingRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("건물을 찾을 수 없습니다"));
         logger.info("{}번 건물 조회 완료! 요청자: {}", id, uid);
-        return BuildingDTO.entityToDtoForViewer(buildingEntity, uid);   // 공실표는 소유자에게만
+        return toDtoShared(buildingEntity, vacancyAllowedUids(uid));   // 공실표는 소유자+같은 사무소만
     }
 
     @Transactional(readOnly = true)
     public List<BuildingDTO> search(String uid, String keyword, UserDetails userDetails) {
         checkAuth(uid, userDetails);
+        java.util.Set<String> allowed = vacancyAllowedUids(uid);
         return buildingRepository.searchAll(keyword).stream()
-                .map(b -> BuildingDTO.entityToDtoForViewer(b, uid))
+                .map(b -> toDtoShared(b, allowed))
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public List<BuildingDTO> findByType(String uid, String type, UserDetails userDetails) {
         checkAuth(uid, userDetails);
+        java.util.Set<String> allowed = vacancyAllowedUids(uid);
         return buildingRepository.findByTypeAndDeletedAtIsNull(type).stream()
-                .map(b -> BuildingDTO.entityToDtoForViewer(b, uid))
+                .map(b -> toDtoShared(b, allowed))
                 .collect(Collectors.toList());
     }
 
@@ -216,8 +239,9 @@ public class BuildingService {
     @Transactional(readOnly = true)
     public List<BuildingDTO> findByDealType(String uid, String dealType, UserDetails userDetails) {
         checkAuth(uid, userDetails);
+        java.util.Set<String> allowed = vacancyAllowedUids(uid);
         return buildingRepository.findByDealTypeAndDeletedAtIsNull(dealType).stream()
-                .map(b -> BuildingDTO.entityToDtoForViewer(b, uid))
+                .map(b -> toDtoShared(b, allowed))
                 .collect(Collectors.toList());
     }
 

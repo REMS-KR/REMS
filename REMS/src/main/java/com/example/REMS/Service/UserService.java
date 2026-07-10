@@ -212,6 +212,134 @@ public class UserService {
         return toPermissionDTO(user, getOrCreatePermission(user));
     }
 
+    // ========================================================
+    // 사무소 공유 (같은 코드를 가진 중개사끼리 매물 co-관리)
+    // ========================================================
+    private static final String OFFICE_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 헷갈리는 0/O/1/I 제외
+
+    private UserEntity authUser(String uid, UserDetails userDetails) {
+        if (userDetails == null || !userDetails.getUsername().equals(uid)) {
+            throw new RuntimeException("권한이 없습니다");
+        }
+        return userRepository.findByUid(uid)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다"));
+    }
+
+    private void requireBrokerUser(UserEntity user) {
+        String role = isAdmin(user.getUid()) ? ROLE_ADMIN : getOrCreatePermission(user).getRole();
+        if (!(ROLE_BROKER.equals(role) || ROLE_ADMIN.equals(role))) {
+            throw new RuntimeException("중개사 회원만 사용할 수 있는 기능입니다");
+        }
+    }
+
+    private String randomOfficeCode(int n) {
+        java.security.SecureRandom r = new java.security.SecureRandom();
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < n; i++) sb.append(OFFICE_CODE_CHARS.charAt(r.nextInt(OFFICE_CODE_CHARS.length())));
+        return sb.toString();
+    }
+
+    private String genUniqueOfficeCode() {
+        for (int i = 0; i < 30; i++) {
+            String c = randomOfficeCode(6);
+            if (userRepository.findByOfficeCode(c).isEmpty()) return c;
+        }
+        return randomOfficeCode(8);
+    }
+
+    private List<Map<String, Object>> officeMembers(String code) {
+        if (code == null || code.isBlank()) return List.of();
+        return userRepository.findByOfficeCode(code).stream().map(u -> {
+            Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("uid", u.getUid());
+            m.put("name", u.getName());
+            m.put("nickname", u.getNickname());
+            m.put("profileURL", u.getProfileURL());
+            m.put("agencyName", u.getAgencyName());
+            return m;
+        }).collect(Collectors.toList());
+    }
+
+    private Map<String, Object> officeInfo(String code) {
+        Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("code", (code != null && !code.isBlank()) ? code : null);
+        m.put("members", officeMembers(code));
+        return m;
+    }
+
+    // 같은 사무소(공유 그룹) 소속 uid 목록 — 미소속이면 본인만. (BuildingService 등에서 사용)
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public List<String> officeMemberUids(String uid) {
+        UserEntity u = userRepository.findByUid(uid).orElse(null);
+        if (u == null) return List.of(uid);
+        String code = u.getOfficeCode();
+        if (code == null || code.isBlank()) return List.of(uid);
+        List<String> uids = userRepository.findByOfficeCode(code).stream()
+                .map(UserEntity::getUid).collect(Collectors.toList());
+        return uids.isEmpty() ? List.of(uid) : uids;
+    }
+
+    // 두 uid 가 같은 사무소 그룹인지
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public boolean sameOffice(String a, String b) {
+        if (a == null || b == null) return false;
+        if (a.equals(b)) return true;
+        UserEntity ua = userRepository.findByUid(a).orElse(null);
+        UserEntity ub = userRepository.findByUid(b).orElse(null);
+        if (ua == null || ub == null) return false;
+        String ca = ua.getOfficeCode();
+        return ca != null && !ca.isBlank() && ca.equals(ub.getOfficeCode());
+    }
+
+    // 사무소 코드 생성(없으면) 또는 기존 코드 반환 (중개사 전용)
+    @org.springframework.transaction.annotation.Transactional
+    public Map<String, Object> createOrGetOfficeCode(String uid, UserDetails userDetails) {
+        UserEntity u = authUser(uid, userDetails);
+        requireBrokerUser(u);
+        if (u.getOfficeCode() == null || u.getOfficeCode().isBlank()) {
+            u.setOfficeCode(genUniqueOfficeCode());
+            userRepository.save(u);
+            logger.info("사무소 코드 생성 - uid={}, code={}", uid, u.getOfficeCode());
+        }
+        return officeInfo(u.getOfficeCode());
+    }
+
+    // 기존 사무소 코드로 참여 (중개사 전용)
+    @org.springframework.transaction.annotation.Transactional
+    public Map<String, Object> joinOffice(String uid, String code, UserDetails userDetails) {
+        UserEntity u = authUser(uid, userDetails);
+        requireBrokerUser(u);
+        if (code == null || code.trim().isBlank()) throw new IllegalArgumentException("사무소 코드를 입력하세요");
+        String c = code.trim().toUpperCase();
+        if (userRepository.findByOfficeCode(c).isEmpty()) {
+            throw new IllegalArgumentException("존재하지 않는 사무소 코드입니다");
+        }
+        u.setOfficeCode(c);
+        userRepository.save(u);
+        logger.info("사무소 참여 - uid={}, code={}", uid, c);
+        return officeInfo(c);
+    }
+
+    // 사무소 나가기 (코드 해제)
+    @org.springframework.transaction.annotation.Transactional
+    public Map<String, Object> leaveOffice(String uid, UserDetails userDetails) {
+        UserEntity u = authUser(uid, userDetails);
+        u.setOfficeCode(null);
+        userRepository.save(u);
+        logger.info("사무소 나가기 - uid={}", uid);
+        Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("code", null);
+        m.put("members", List.of());
+        return m;
+    }
+
+    // 내 사무소 정보(코드 + 멤버)
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public Map<String, Object> getOffice(String uid, UserDetails userDetails) {
+        UserEntity u = authUser(uid, userDetails);
+        return officeInfo(u.getOfficeCode());
+    }
+
     // 관리자: 전체 유저 + 권한 목록
     @org.springframework.transaction.annotation.Transactional
     public List<UserPermissionDTO> getAllPermissions(String uid, UserDetails userDetails) {
