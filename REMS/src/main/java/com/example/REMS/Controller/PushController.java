@@ -28,6 +28,7 @@ public class PushController {
     private final PushService pushService;
     private final PushSubscriptionRepository subscriptionRepository;
     private final com.example.REMS.Repository.NotificationRepository notificationRepository;
+    private final com.example.REMS.Service.CustomerNotificationScheduler scheduler;
 
     // 공개키는 인증 없이 접근 가능해야 함 (SecurityConfig 에서 permitAll 필요)
     @Operation(summary = "VAPID 공개키 조회")
@@ -131,6 +132,32 @@ public class PushController {
         checkAuth(uid, userDetails);
         notificationRepository.deleteAll(notificationRepository.findTop50ByUidOrderByIdDesc(uid));
         return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    // ===== 진단: 스케줄 상태 확인 & 수동 실행 =====
+    @Operation(summary = "알림 스케줄 진단 (서버시각/예정건 확인)")
+    @GetMapping("/debug/{uid}")
+    public ResponseEntity<Map<String, Object>> debug(@PathVariable("uid") String uid,
+                                                     @AuthenticationPrincipal UserDetails userDetails) {
+        checkAuth(uid, userDetails);
+        var kst = java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Seoul"));
+        Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("serverZone", java.time.ZoneId.systemDefault().toString());
+        m.put("serverNow", java.time.LocalDateTime.now().toString());
+        m.put("kstNow", kst.toString());
+        m.put("pushConfigured", pushService.getPublicKey() != null && !pushService.getPublicKey().isBlank());
+        m.put("mySubscriptions", subscriptionRepository.findByUid(uid).size());
+        return ResponseEntity.ok(m);
+    }
+
+    @Operation(summary = "알림 스케줄러 수동 실행 (테스트)")
+    @PostMapping("/debug/{uid}/run")
+    public ResponseEntity<Map<String, Object>> runScheduler(@PathVariable("uid") String uid,
+                                                            @AuthenticationPrincipal UserDetails userDetails) {
+        checkAuth(uid, userDetails);
+        scheduler.notifyOneHourBefore();
+        scheduler.notifyToday();
+        return ResponseEntity.ok(Map.of("ok", true, "message", "스케줄러를 수동 실행했습니다. 알림 목록을 확인하세요."));
     }
 
     private void checkAuth(String uid, UserDetails userDetails) {

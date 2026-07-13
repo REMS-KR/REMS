@@ -31,6 +31,13 @@ public class CustomerNotificationScheduler {
     private final CustomerRepository customerRepository;
     private final PushService pushService;
 
+    // 서버(JVM) 타임존이 UTC 여도 항상 한국 시간 기준으로 계산한다.
+    private static final java.time.ZoneId KST = java.time.ZoneId.of("Asia/Seoul");
+
+    private static LocalDateTime nowKst() {
+        return LocalDateTime.now(KST);
+    }
+
     private static String nameOf(CustomerEntity c) {
         return (c.getName() != null && !c.getName().trim().isEmpty()) ? c.getName().trim() : "고객";
     }
@@ -43,9 +50,13 @@ public class CustomerNotificationScheduler {
     @Scheduled(cron = "0 * * * * *", zone = "Asia/Seoul")
     @Transactional
     public void notifyOneHourBefore() {
-        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES);
-        LocalDateTime start = now.plusMinutes(59);   // 1시간 전 ±1분 창(플래그로 중복 방지)
-        LocalDateTime end = now.plusMinutes(61);
+        LocalDateTime now = nowKst().truncatedTo(ChronoUnit.MINUTES);
+
+        // "1시간 뒤" 지점을 노리되, 서버 재시작·지연으로 그 1분을 놓쳐도 받도록 창을 넓힌다.
+        //  - 이미 지나간 일정(now 이전)은 제외
+        //  - now ~ now+60분 사이에 시작하는 미발송 건이면 발송 (늦더라도 알림은 간다)
+        LocalDateTime start = now;
+        LocalDateTime end = now.plusMinutes(60);
 
         List<CustomerEntity> meetings = customerRepository
                 .findByMeetingAtBetweenAndNotifiedMeetingFalse(start, end);
@@ -64,15 +75,25 @@ public class CustomerNotificationScheduler {
         }
 
         if (!meetings.isEmpty() || !contracts.isEmpty()) {
-            logger.info("1시간 전 알림 발송 - 미팅 {}건, 본계약 {}건", meetings.size(), contracts.size());
+            logger.info("1시간 전 알림 발송 - 미팅 {}건, 본계약 {}건 (기준시각 KST {})",
+                    meetings.size(), contracts.size(), now);
+        } else {
+            logger.debug("1시간 전 알림 대상 없음 - 검사구간 KST {} ~ {}", start, end);
         }
+    }
+
+    // 스케줄러가 실제로 등록/기동됐는지 확인용 (없으면 @EnableScheduling 누락)
+    @jakarta.annotation.PostConstruct
+    public void onStart() {
+        logger.info("알림 스케줄러 로드됨 - 서버 기본 타임존={}, 현재 KST={}",
+                java.time.ZoneId.systemDefault(), nowKst());
     }
 
     // 매일 오전 11시 — 잔금/입주 당일 알림
     @Scheduled(cron = "0 0 11 * * *", zone = "Asia/Seoul")
     @Transactional
     public void notifyToday() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = nowKst().toLocalDate();
 
         List<CustomerEntity> balances = customerRepository
                 .findByBalanceOnAndNotifiedBalanceFalse(today);
