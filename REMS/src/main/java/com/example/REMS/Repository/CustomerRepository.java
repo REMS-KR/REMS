@@ -2,9 +2,8 @@ package com.example.REMS.Repository;
 
 import com.example.REMS.Entity.CustomerEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
 public interface CustomerRepository extends JpaRepository<CustomerEntity, Long> {
@@ -12,11 +11,12 @@ public interface CustomerRepository extends JpaRepository<CustomerEntity, Long> 
     List<CustomerEntity> findByOwner_UidOrderByIdDesc(String uid);
 
     // ===== 푸시 알림 스케줄러용 =====
-    // 미팅/본계약: 특정 구간(1시간 뒤 그 1분)에 해당하고 아직 미발송
-    List<CustomerEntity> findByMeetingAtBetweenAndNotifiedMeetingFalse(LocalDateTime start, LocalDateTime end);
-    List<CustomerEntity> findByContractAtBetweenAndNotifiedContractFalse(LocalDateTime start, LocalDateTime end);
-
-    // 잔금/입주: 오늘 날짜이고 아직 미발송
-    List<CustomerEntity> findByBalanceOnAndNotifiedBalanceFalse(LocalDate date);
-    List<CustomerEntity> findByMoveInOnAndNotifiedMoveInFalse(LocalDate date);
+    // 알림이 남아있을 수 있는 일정 보유 고객만 추린다.
+    // (시점 계산은 사용자별 설정에 따라 달라지므로 스케줄러에서 판단)
+    @Query("SELECT c FROM customers c WHERE " +
+           "(c.meetingAt  IS NOT NULL AND (c.notifiedMeeting  = false OR c.notifiedMeeting2  = false)) OR " +
+           "(c.contractAt IS NOT NULL AND (c.notifiedContract = false OR c.notifiedContract2 = false)) OR " +
+           "(c.balanceOn  IS NOT NULL AND (c.notifiedBalance  = false OR c.notifiedBalance2  = false)) OR " +
+           "(c.moveInOn   IS NOT NULL AND (c.notifiedMoveIn   = false OR c.notifiedMoveIn2   = false))")
+    List<CustomerEntity> findPendingNotifications();
 }

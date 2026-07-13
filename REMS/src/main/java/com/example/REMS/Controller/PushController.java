@@ -29,6 +29,7 @@ public class PushController {
     private final PushSubscriptionRepository subscriptionRepository;
     private final com.example.REMS.Repository.NotificationRepository notificationRepository;
     private final com.example.REMS.Service.CustomerNotificationScheduler scheduler;
+    private final com.example.REMS.Repository.NotificationSettingRepository settingRepository;
 
     // 공개키는 인증 없이 접근 가능해야 함 (SecurityConfig 에서 permitAll 필요)
     @Operation(summary = "VAPID 공개키 조회")
@@ -158,6 +159,57 @@ public class PushController {
         scheduler.notifyOneHourBefore();
         scheduler.notifyToday();
         return ResponseEntity.ok(Map.of("ok", true, "message", "스케줄러를 수동 실행했습니다. 알림 목록을 확인하세요."));
+    }
+
+    // ===== 알림 시점 설정 =====
+    @Operation(summary = "알림 시점 설정 조회")
+    @GetMapping("/settings/{uid}")
+    @Transactional
+    public ResponseEntity<com.example.REMS.Entity.NotificationSettingEntity> getSettings(
+            @PathVariable("uid") String uid,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        checkAuth(uid, userDetails);
+        var s = settingRepository.findByUid(uid).orElseGet(() ->
+                settingRepository.save(com.example.REMS.Entity.NotificationSettingEntity.builder().uid(uid).build()));
+        return ResponseEntity.ok(s);
+    }
+
+    @Operation(summary = "알림 시점 설정 저장")
+    @PutMapping("/settings/{uid}")
+    @Transactional
+    public ResponseEntity<com.example.REMS.Entity.NotificationSettingEntity> saveSettings(
+            @PathVariable("uid") String uid,
+            @RequestBody com.example.REMS.Entity.NotificationSettingEntity body,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        checkAuth(uid, userDetails);
+        var s = settingRepository.findByUid(uid).orElseGet(() ->
+                com.example.REMS.Entity.NotificationSettingEntity.builder().uid(uid).build());
+
+        // 1차(필수): 값이 없으면 기존값 유지, 그래도 없으면 기본값
+        s.setMeetingLead1(req(body.getMeetingLead1(), s.getMeetingLead1(), 60));
+        s.setContractLead1(req(body.getContractLead1(), s.getContractLead1(), 60));
+        s.setBalanceDay1(req(body.getBalanceDay1(), s.getBalanceDay1(), 0));
+        s.setBalanceHour1(req(body.getBalanceHour1(), s.getBalanceHour1(), 11));
+        s.setMoveInDay1(req(body.getMoveInDay1(), s.getMoveInDay1(), 0));
+        s.setMoveInHour1(req(body.getMoveInHour1(), s.getMoveInHour1(), 11));
+
+        // 2차(선택): null 이면 '사용 안 함'으로 그대로 저장
+        s.setMeetingLead2(body.getMeetingLead2());
+        s.setContractLead2(body.getContractLead2());
+        s.setBalanceDay2(body.getBalanceDay2());
+        s.setBalanceHour2(body.getBalanceDay2() == null ? null
+                : (body.getBalanceHour2() == null ? 11 : body.getBalanceHour2()));
+        s.setMoveInDay2(body.getMoveInDay2());
+        s.setMoveInHour2(body.getMoveInDay2() == null ? null
+                : (body.getMoveInHour2() == null ? 11 : body.getMoveInHour2()));
+
+        s.setUid(uid);
+        return ResponseEntity.ok(settingRepository.save(s));
+    }
+
+    private Integer req(Integer incoming, Integer current, Integer fallback) {
+        if (incoming != null) return incoming;
+        return current != null ? current : fallback;
     }
 
     private void checkAuth(String uid, UserDetails userDetails) {

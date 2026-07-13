@@ -232,6 +232,10 @@ const Api = {
         fetch(`${API_BASE_URL}/push/notifications/${getUid()}/read-all`, { method: 'POST', headers: authHeaders() }).then(handleResponse),
     clearNotifications: () =>
         fetch(`${API_BASE_URL}/push/notifications/${getUid()}`, { method: 'DELETE', headers: authHeaders() }).then(handleResponse),
+    getNotiSettings: () =>
+        fetch(`${API_BASE_URL}/push/settings/${getUid()}`, { headers: authHeaders() }).then(handleResponse),
+    saveNotiSettings: (dto) =>
+        fetch(`${API_BASE_URL}/push/settings/${getUid()}`, { method: 'PUT', headers: authHeaders(true), body: JSON.stringify(dto) }).then(handleResponse),
 
     // 계약자·임차인 관리 (중개사 전용)
     getTenants: () =>
@@ -1461,7 +1465,8 @@ function pushCardHTML() {
                        transform:translateX(${on ? '21px' : '0'});"></span>
         </button>
       </div>
-      ${on ? `<button class="btn-secondary" style="width:100%;margin-top:12px;" onclick="testPush()">테스트 알림 보내기</button>` : ''}
+      ${on ? `<button class="btn-secondary" style="width:100%;margin-top:12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;" onclick="openNotiSettings()">${icon('edit', 15)} 알림 시점 설정</button>
+              <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="testPush()">테스트 알림 보내기</button>` : ''}
     `;
 }
 
@@ -1524,6 +1529,139 @@ async function acceptPushOptIn() {
 function declinePushOptIn() {
     localStorage.setItem(PUSH_ASKED_KEY, '1');
     closeModal();
+}
+
+// =====================================================
+// 알림 시점 설정 (미팅/본계약/잔금/입주 · 1차 필수 + 2차 선택)
+// =====================================================
+// 시각이 있는 일정: '몇 분 전'
+const LEAD_OPTS = [
+    { v: 10, t: '10분 전' }, { v: 30, t: '30분 전' }, { v: 60, t: '1시간 전' },
+    { v: 120, t: '2시간 전' }, { v: 180, t: '3시간 전' }, { v: 360, t: '6시간 전' },
+    { v: 1440, t: '1일 전' }, { v: 2880, t: '2일 전' }
+];
+// 날짜만 있는 일정: '며칠 전'
+const DAY_OPTS = [
+    { v: 0, t: '당일' }, { v: 1, t: '1일 전' }, { v: 2, t: '2일 전' },
+    { v: 3, t: '3일 전' }, { v: 7, t: '7일 전' }
+];
+const HOUR_OPTS = Array.from({ length: 24 }, (_, h) => ({
+    v: h, t: (h < 12 ? '오전 ' : '오후 ') + (h % 12 === 0 ? 12 : h % 12) + '시'
+}));
+
+let _notiSettings = null;
+
+async function openNotiSettings() {
+    document.getElementById('modal-title').textContent = '알림 시점 설정';
+    document.getElementById('modal-body').innerHTML =
+        '<div style="padding:26px;text-align:center;color:#9ca3af;font-size:13px;">불러오는 중…</div>';
+    document.getElementById('modal-footer').innerHTML = '';
+    showModal();
+    try {
+        _notiSettings = await Api.getNotiSettings();
+        renderNotiSettings();
+    } catch (e) {
+        document.getElementById('modal-body').innerHTML =
+            `<div style="padding:24px;text-align:center;color:#dc2626;font-size:13px;">불러오기 실패: ${escapeHtml(e.message || '')}</div>`;
+    }
+}
+
+function sel(id, opts, val, allowEmpty) {
+    const empty = allowEmpty ? `<option value="">사용 안 함</option>` : '';
+    const cur = (val === null || val === undefined) ? '' : String(val);
+    return `<select id="${id}" class="form-input" style="padding:9px 10px;">
+        ${empty}${opts.map(o => `<option value="${o.v}" ${cur === String(o.v) ? 'selected' : ''}>${o.t}</option>`).join('')}
+    </select>`;
+}
+
+function renderNotiSettings() {
+    const s = _notiSettings || {};
+    // 시각 일정 블록 (미팅/본계약)
+    const timeBlock = (title, k1, k2) => `
+      <div style="padding:12px 0;border-bottom:1px solid #f1f3f5;">
+        <div style="font-size:13px;font-weight:800;color:#111827;margin-bottom:8px;">${title}</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="flex-shrink:0;width:64px;font-size:12.5px;color:#6b7280;font-weight:700;">1차 <span style="color:#ef4444;">*</span></span>
+          ${sel('ns-' + k1, LEAD_OPTS, s[k1] != null ? s[k1] : 60, false)}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="flex-shrink:0;width:64px;font-size:12.5px;color:#9ca3af;font-weight:700;">2차</span>
+          ${sel('ns-' + k2, LEAD_OPTS, s[k2], true)}
+        </div>
+      </div>`;
+
+    // 날짜 일정 블록 (잔금/입주) — 며칠 전 + 몇 시
+    const dateBlock = (title, d1, h1, d2, h2) => `
+      <div style="padding:12px 0;border-bottom:1px solid #f1f3f5;">
+        <div style="font-size:13px;font-weight:800;color:#111827;margin-bottom:8px;">${title}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <span style="flex-shrink:0;width:64px;font-size:12.5px;color:#6b7280;font-weight:700;">1차 <span style="color:#ef4444;">*</span></span>
+          ${sel('ns-' + d1, DAY_OPTS, s[d1] != null ? s[d1] : 0, false)}
+          ${sel('ns-' + h1, HOUR_OPTS, s[h1] != null ? s[h1] : 11, false)}
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="flex-shrink:0;width:64px;font-size:12.5px;color:#9ca3af;font-weight:700;">2차</span>
+          ${sel('ns-' + d2, DAY_OPTS, s[d2], true)}
+          ${sel('ns-' + h2, HOUR_OPTS, s[h2] != null ? s[h2] : 11, false)}
+        </div>
+      </div>`;
+
+    document.getElementById('modal-body').innerHTML = `
+      <div style="font-size:12.5px;color:#6b7280;line-height:1.6;margin-bottom:6px;">
+        일정별로 언제 알림을 받을지 정하세요. <b style="color:#374151;">1차는 필수</b>, 2차는 비워두면 보내지 않습니다.
+      </div>
+      ${timeBlock('🤝 미팅', 'meetingLead1', 'meetingLead2')}
+      ${timeBlock('📝 본계약', 'contractLead1', 'contractLead2')}
+      ${dateBlock('💰 잔금', 'balanceDay1', 'balanceHour1', 'balanceDay2', 'balanceHour2')}
+      ${dateBlock('🔑 입주', 'moveInDay1', 'moveInHour1', 'moveInDay2', 'moveInHour2')}
+    `;
+    document.getElementById('modal-footer').innerHTML = `
+      <button class="btn-secondary" onclick="backToSettingsFromNoti()">← 뒤로</button>
+      <button class="btn-primary" onclick="saveNotiSettings()">저장</button>`;
+}
+
+function backToSettingsFromNoti() {
+    closeModal();
+    if (activeTab === 'settings') showSettingsView();
+    else switchTab('settings');
+}
+
+async function saveNotiSettings() {
+    const num = id => {
+        const el = document.getElementById(id);
+        if (!el || el.value === '') return null;      // 빈값 = 사용 안 함
+        const n = parseInt(el.value, 10);
+        return isNaN(n) ? null : n;
+    };
+    const dto = {
+        meetingLead1: num('ns-meetingLead1'),
+        meetingLead2: num('ns-meetingLead2'),
+        contractLead1: num('ns-contractLead1'),
+        contractLead2: num('ns-contractLead2'),
+        balanceDay1: num('ns-balanceDay1'),
+        balanceHour1: num('ns-balanceHour1'),
+        balanceDay2: num('ns-balanceDay2'),      // null 이면 2차 미사용
+        balanceHour2: num('ns-balanceHour2'),
+        moveInDay1: num('ns-moveInDay1'),
+        moveInHour1: num('ns-moveInHour1'),
+        moveInDay2: num('ns-moveInDay2'),
+        moveInHour2: num('ns-moveInHour2')
+    };
+    // 1차는 필수
+    if (dto.meetingLead1 == null || dto.contractLead1 == null
+        || dto.balanceDay1 == null || dto.balanceHour1 == null
+        || dto.moveInDay1 == null || dto.moveInHour1 == null) {
+        showToast('1차 알림은 필수입니다');
+        return;
+    }
+    showLoading('알림 설정을 저장하는 중…');
+    try {
+        _notiSettings = await Api.saveNotiSettings(dto);
+        showToast('알림 설정을 저장했습니다');
+        backToSettingsFromNoti();
+    } catch (e) {
+        alert('저장 실패\n\n' + (e.message || ''));
+    } finally { hideLoading(); }
 }
 
 // 로드 시 서비스워커 등록 + 현재 푸시 구독 상태 확인 + 최초 1회 안내

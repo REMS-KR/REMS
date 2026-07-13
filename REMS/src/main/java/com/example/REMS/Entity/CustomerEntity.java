@@ -48,11 +48,17 @@ public class CustomerEntity {
     private LocalDate balanceOn;       // 잔금일 → 당일 알림
     private LocalDate moveInOn;        // 입주일 → 당일 알림
 
-    // 중복 발송 방지 플래그
+    // 중복 발송 방지 플래그 (1차)
     @Builder.Default private Boolean notifiedMeeting = false;
     @Builder.Default private Boolean notifiedContract = false;
     @Builder.Default private Boolean notifiedBalance = false;
     @Builder.Default private Boolean notifiedMoveIn = false;
+
+    // 중복 발송 방지 플래그 (2차 — 사용자가 두 번째 알림을 설정한 경우)
+    @Builder.Default private Boolean notifiedMeeting2 = false;
+    @Builder.Default private Boolean notifiedContract2 = false;
+    @Builder.Default private Boolean notifiedBalance2 = false;
+    @Builder.Default private Boolean notifiedMoveIn2 = false;
 
     // 이 고객에게 연결(추천)된 매물 건물 id 목록
     @ElementCollection
