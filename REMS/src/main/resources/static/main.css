@@ -34,7 +34,15 @@
 html, body { height: 100%; overflow: hidden; font-family: var(--font); background: var(--gray-100); }
 
 /* ===== APP SHELL ===== */
-#app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; position: relative; }
+/* 100dvh: 주소창/시스템 바 변화에 맞춰 실제 보이는 높이를 사용 (안드로이드 하단 메뉴 잘림 방지) */
+#app {
+    display: flex; flex-direction: column;
+    height: 100vh;              /* 구형 브라우저 폴백 */
+    height: 100dvh;             /* 동적 뷰포트 높이 */
+    max-height: 100dvh;
+    position: relative;
+    overflow: hidden;           /* 내부 스크롤만 허용 → 페이지 전체가 밀려 메뉴가 사라지는 것 방지 */
+}
 
 /* TOP BAR */
 #topbar {
@@ -416,7 +424,17 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
     border-top: 1px solid var(--gray-100);
     box-shadow: 0 -4px 20px rgba(17,24,39,0.06);
     padding: 6px 10px;
-    padding-bottom: max(6px, env(safe-area-inset-bottom));
+    /* 안드로이드(15+ edge-to-edge)·iOS 모두 시스템 제스처 바에 가리지 않도록 하단 여백 확보.
+       viewport-fit=cover 가 있어야 env() 가 실제 값을 반환한다(main.html 참고).
+       env() 미지원/0 인 기기를 위해 최소값을 넉넉히 둔다. */
+    padding-bottom: 6px;
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+    /* 제스처 내비게이션 기기에서 안전 여백이 0으로 보고되는 경우 대비 */
+    box-sizing: border-box;
+}
+/* 세로 모드 모바일(터치 기기)에서는 시스템 바 여유를 최소 12px 보장 */
+@media (hover: none) and (pointer: coarse) {
+    #bottom-nav { padding-bottom: max(12px, calc(6px + env(safe-area-inset-bottom, 0px))); }
 }
 .nav-tab {
     flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center;
