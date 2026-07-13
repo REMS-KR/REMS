@@ -24,10 +24,11 @@ gemini:
   api-key: ${GEMINI_API_KEY}
   model: gemini-2.5-flash
 
-vapid:
-  public-key: ${VAPID_PUBLIC_KEY}
-  private-key: ${VAPID_PRIVATE_KEY}
-  subject: ${VAPID_EMAIL}
+push:
+  vapid:
+    public-key: ${VAPID_PUBLIC_KEY}
+    private-key: ${VAPID_PRIVATE_KEY}
+    subject: ${VAPID_EMAIL}
 
 spring:
   profiles:
