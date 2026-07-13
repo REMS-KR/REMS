@@ -81,7 +81,7 @@ public class PushController {
     public ResponseEntity<Map<String, Object>> test(@PathVariable("uid") String uid,
                                                     @AuthenticationPrincipal UserDetails userDetails) {
         checkAuth(uid, userDetails);
-        pushService.sendToUser(uid, "핵방노트", "푸시 알림이 정상적으로 설정되었습니다 🎉", "test");
+        pushService.sendToUser(uid, "핵방노트", "푸시 알림이 정상적으로 설정되었습니다", "test");
         return ResponseEntity.ok(Map.of("ok", true));
     }
 

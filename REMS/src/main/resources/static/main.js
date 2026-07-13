@@ -502,6 +502,11 @@ const ICON_PATHS = {
     map:     '<polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/>',
     agency:  '<path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/><path d="M3 9h18"/>',
     phone:   '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7A2 2 0 0 1 22 16.9z"/>',
+    bell:    '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+    meeting: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    contract: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h4"/>',
+    money:   '<circle cx="12" cy="12" r="9"/><path d="M15 9.5a2.5 2.5 0 0 0-2.5-1.5h-1a2 2 0 0 0 0 4h1a2 2 0 0 1 0 4h-1A2.5 2.5 0 0 1 9 14.5"/><path d="M12 6.5v11"/>',
+    key:     '<path d="M21 2l-2 2"/><path d="M18.5 4.5L15 8"/><path d="M16.5 6.5l2 2"/><circle cx="9.5" cy="14.5" r="5.5"/><path d="M13.4 10.6L15 8"/>',
     // 건물 유형 아이콘 (단독&다중 / 다세대 / 오피스텔 / 상가)
     house:      '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
     multiplex:  '<path d="M3 21V9l5-4 5 4v12"/><path d="M13 21V11l4-3 4 3v10"/><path d="M6 13h1.5M6 16.5h1.5M9.5 13h1.5M9.5 16.5h1.5"/>',
@@ -1449,7 +1454,7 @@ async function refreshPushCard() {
 }
 
 function pushCardHTML() {
-    const bell = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
+    const bell = icon('bell', 15);
     const on = !!_pushEnabled;
     return `
       <div style="display:flex;align-items:center;gap:10px;">
@@ -1504,7 +1509,7 @@ function showPushOptInModal() {
     document.getElementById('modal-title').textContent = '알림 받기';
     document.getElementById('modal-body').innerHTML = `
       <div style="text-align:center;padding:8px 4px 4px;">
-        <div style="font-size:42px;line-height:1;margin-bottom:14px;">🔔</div>
+        <div style="width:64px;height:64px;margin:0 auto 14px;border-radius:18px;background:#e8effd;color:#1a56db;display:flex;align-items:center;justify-content:center;">${icon('bell', 30)}</div>
         <div style="font-size:15px;font-weight:800;color:#111827;margin-bottom:8px;">중요한 일정을 놓치지 마세요</div>
         <div style="font-size:13px;color:#6b7280;line-height:1.7;">
           고객 <b style="color:#374151;">미팅·본계약 1시간 전</b>,<br>
@@ -1534,6 +1539,15 @@ function declinePushOptIn() {
 // =====================================================
 // 알림 시점 설정 (미팅/본계약/잔금/입주 · 1차 필수 + 2차 선택)
 // =====================================================
+// 알림 유형별 아이콘/색 (알림 목록 · 시점 설정 공용)
+const NOTI_ICONS = {
+    meeting:  { icon: 'meeting',  label: '미팅',   fg: '#1a56db', bg: '#e8effd' },
+    contract: { icon: 'contract', label: '본계약', fg: '#7c3aed', bg: '#f1ebfe' },
+    balance:  { icon: 'money',    label: '잔금',   fg: '#d97706', bg: '#fef3e2' },
+    movein:   { icon: 'key',      label: '입주',   fg: '#16a34a', bg: '#e7f6ec' },
+    test:     { icon: 'bell',     label: '테스트', fg: '#6b7280', bg: '#f3f4f6' }
+};
+
 // 시각이 있는 일정: '몇 분 전'
 const LEAD_OPTS = [
     { v: 10, t: '10분 전' }, { v: 30, t: '30분 전' }, { v: 60, t: '1시간 전' },
@@ -1576,10 +1590,17 @@ function sel(id, opts, val, allowEmpty) {
 
 function renderNotiSettings() {
     const s = _notiSettings || {};
+    const head = (name, title) => {
+        const m = NOTI_ICONS[name];
+        return `<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px;">
+          <span style="flex-shrink:0;width:26px;height:26px;border-radius:8px;background:${m.bg};color:${m.fg};display:inline-flex;align-items:center;justify-content:center;">${icon(m.icon, 14)}</span>
+          <span style="font-size:13px;font-weight:800;color:#111827;">${title}</span>
+        </div>`;
+    };
     // 시각 일정 블록 (미팅/본계약)
-    const timeBlock = (title, k1, k2) => `
+    const timeBlock = (name, title, k1, k2) => `
       <div style="padding:12px 0;border-bottom:1px solid #f1f3f5;">
-        <div style="font-size:13px;font-weight:800;color:#111827;margin-bottom:8px;">${title}</div>
+        ${head(name, title)}
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <span style="flex-shrink:0;width:64px;font-size:12.5px;color:#6b7280;font-weight:700;">1차 <span style="color:#ef4444;">*</span></span>
           ${sel('ns-' + k1, LEAD_OPTS, s[k1] != null ? s[k1] : 60, false)}
@@ -1591,9 +1612,9 @@ function renderNotiSettings() {
       </div>`;
 
     // 날짜 일정 블록 (잔금/입주) — 며칠 전 + 몇 시
-    const dateBlock = (title, d1, h1, d2, h2) => `
+    const dateBlock = (name, title, d1, h1, d2, h2) => `
       <div style="padding:12px 0;border-bottom:1px solid #f1f3f5;">
-        <div style="font-size:13px;font-weight:800;color:#111827;margin-bottom:8px;">${title}</div>
+        ${head(name, title)}
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
           <span style="flex-shrink:0;width:64px;font-size:12.5px;color:#6b7280;font-weight:700;">1차 <span style="color:#ef4444;">*</span></span>
           ${sel('ns-' + d1, DAY_OPTS, s[d1] != null ? s[d1] : 0, false)}
@@ -1610,10 +1631,10 @@ function renderNotiSettings() {
       <div style="font-size:12.5px;color:#6b7280;line-height:1.6;margin-bottom:6px;">
         일정별로 언제 알림을 받을지 정하세요. <b style="color:#374151;">1차는 필수</b>, 2차는 비워두면 보내지 않습니다.
       </div>
-      ${timeBlock('🤝 미팅', 'meetingLead1', 'meetingLead2')}
-      ${timeBlock('📝 본계약', 'contractLead1', 'contractLead2')}
-      ${dateBlock('💰 잔금', 'balanceDay1', 'balanceHour1', 'balanceDay2', 'balanceHour2')}
-      ${dateBlock('🔑 입주', 'moveInDay1', 'moveInHour1', 'moveInDay2', 'moveInHour2')}
+      ${timeBlock('meeting', '미팅', 'meetingLead1', 'meetingLead2')}
+      ${timeBlock('contract', '본계약', 'contractLead1', 'contractLead2')}
+      ${dateBlock('balance', '잔금', 'balanceDay1', 'balanceHour1', 'balanceDay2', 'balanceHour2')}
+      ${dateBlock('movein', '입주', 'moveInDay1', 'moveInHour1', 'moveInDay2', 'moveInHour2')}
     `;
     document.getElementById('modal-footer').innerHTML = `
       <button class="btn-secondary" onclick="backToSettingsFromNoti()">← 뒤로</button>
@@ -1675,13 +1696,6 @@ try {
 // =====================================================
 // 알림 목록 (상단바 벨 버튼)
 // =====================================================
-const NOTI_ICONS = {
-    meeting:  { emoji: '🤝', label: '미팅' },
-    contract: { emoji: '📝', label: '본계약' },
-    balance:  { emoji: '💰', label: '잔금' },
-    movein:   { emoji: '🔑', label: '입주' },
-    test:     { emoji: '🔔', label: '테스트' }
-};
 
 function notiTimeLabel(ms) {
     if (!ms) return '';
@@ -1726,7 +1740,7 @@ function renderNotifications(list) {
     if (!body) return;
     if (!list.length) {
         body.innerHTML = `<div style="padding:36px 20px;text-align:center;color:#9ca3af;">
-            <div style="font-size:34px;margin-bottom:8px;">🔔</div>
+            <div style="width:56px;height:56px;margin:0 auto 10px;border-radius:16px;background:#f3f4f6;color:#9ca3af;display:flex;align-items:center;justify-content:center;">${icon('bell', 26)}</div>
             <div style="font-size:13.5px;font-weight:600;color:#6b7280;">아직 알림이 없습니다</div>
             <div style="font-size:12px;margin-top:6px;line-height:1.6;">고객의 미팅·본계약 1시간 전,<br>잔금·입주 당일 오전 11시에 알림을 보내드립니다.</div>
         </div>`;
@@ -1734,14 +1748,14 @@ function renderNotifications(list) {
         return;
     }
     body.innerHTML = list.map(n => {
-        const meta = NOTI_ICONS[n.type] || { emoji: '🔔', label: '' };
+        const meta = NOTI_ICONS[n.type] || { icon: 'bell', label: '', fg: '#6b7280', bg: '#f3f4f6' };
         const unread = !n.read;
         return `<div style="display:flex;gap:10px;padding:12px 10px;border-bottom:1px solid #f1f3f5;${unread ? 'background:#f8faff;' : ''}border-radius:8px;">
-          <div style="flex-shrink:0;font-size:19px;line-height:1.3;">${meta.emoji}</div>
+          <span style="flex-shrink:0;width:32px;height:32px;border-radius:9px;background:${meta.bg};color:${meta.fg};display:inline-flex;align-items:center;justify-content:center;">${icon(meta.icon, 16)}</span>
           <div style="flex:1;min-width:0;">
             <div style="font-size:13.5px;font-weight:700;color:#111827;line-height:1.5;">${escapeHtml(n.body || '')}</div>
             <div style="font-size:11.5px;color:#9ca3af;margin-top:3px;">
-              ${meta.label ? `<span style="color:#1a56db;font-weight:700;">${meta.label}</span> · ` : ''}${notiTimeLabel(n.createdAt)}
+              ${meta.label ? `<span style="color:${meta.fg};font-weight:700;">${meta.label}</span> · ` : ''}${notiTimeLabel(n.createdAt)}
             </div>
           </div>
           ${unread ? `<span style="flex-shrink:0;width:7px;height:7px;border-radius:50%;background:#1a56db;margin-top:6px;"></span>` : ''}
