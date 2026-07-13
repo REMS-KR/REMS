@@ -789,7 +789,7 @@ async function initMap() {
     // 현재 위치 추적 시작(파란 점). iOS가 아니면 나침반도 바로 연결
     startGeolocationTracking();
     if (!(typeof DeviceOrientationEvent !== 'undefined' &&
-        typeof DeviceOrientationEvent.requestPermission === 'function')) {
+          typeof DeviceOrientationEvent.requestPermission === 'function')) {
         ensureOrientationPermission();
     }
 
@@ -815,13 +815,13 @@ function gotoMyLocation() {
 function centerOnCurrentLocationOnce() {
     if (!navigator.geolocation || !map) return;
     navigator.geolocation.getCurrentPosition(pos => {
-            if (_suppressAutoCenter) return;     // 그 사이 사용자가 지도를 조작했으면 중단
-            const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
-            updateGeoMarker(latlng, pos.coords.heading);
-            map.setCenter(latlng);
-            map.setZoom(16);
-        }, () => { /* 거부/실패 → 기본 서울 중심 유지 */ },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+        if (_suppressAutoCenter) return;     // 그 사이 사용자가 지도를 조작했으면 중단
+        const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+        updateGeoMarker(latlng, pos.coords.heading);
+        map.setCenter(latlng);
+        map.setZoom(16);
+    }, () => { /* 거부/실패 → 기본 서울 중심 유지 */ },
+       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
 }
 
 // =====================================================
@@ -2085,7 +2085,7 @@ function agencySectionHTML(p) {
       <div class="oa-row">
         <span class="oa-row-ic">${icon(ic, 15)}</span>
         ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g, ''))}" class="oa-tel">${escapeHtml(val)}</a>`
-        : `<span>${escapeHtml(val)}</span>`}
+            : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
       <div class="oa-agency">
@@ -2105,7 +2105,7 @@ function agencyCardHTML(p) {
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;">
         <span style="color:#1a56db;display:inline-flex;">${icon(ic, 15)}</span>
         ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g,''))}" style="color:#1a56db;text-decoration:none;font-weight:600;">${escapeHtml(val)}</a>`
-        : `<span>${escapeHtml(val)}</span>`}
+                : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
       <div style="margin-bottom:12px;padding:12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;text-align:left;">
@@ -3519,30 +3519,65 @@ async function detachCustomerBuilding(customerId, buildingId) {
 function officeCardHTML() {
     const code = state.officeCode;
     const members = state.officeMembers || [];
-    const chips = members.length
-        ? members.map(m => `<span style="font-size:12px;font-weight:700;color:#374151;background:#f3f4f6;border-radius:999px;padding:4px 10px;">${escapeHtml(m.name || m.nickname || m.uid)}</span>`).join('')
-        : '<span style="color:#9ca3af;font-size:12.5px;">아직 없음</span>';
+    const sub = code
+        ? `코드 ${escapeHtml(code)} · 공유 멤버 ${members.length}명`
+        : '코드를 만들거나, 받은 코드로 참여하세요';
     return `
-    <div style="width:100%;margin:10px 0 2px;padding:14px;border:1px solid #e5e7eb;border-radius:14px;text-align:left;background:#fff;">
-      <div style="font-size:13px;font-weight:800;color:#111827;margin-bottom:8px;display:flex;align-items:center;gap:6px;">${icon('building', 15)} 사무소 매물 공유</div>
-      ${code ? `
-        <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">우리 사무소 코드 · 같은 코드끼리 매물을 함께 관리합니다</div>
-        <div style="display:flex;gap:6px;align-items:center;margin-bottom:12px;">
-          <div style="flex:1;font-size:18px;font-weight:800;letter-spacing:3px;color:#1a56db;background:#eef4ff;border-radius:9px;padding:9px 12px;text-align:center;">${escapeHtml(code)}</div>
-          <button class="btn-secondary" style="flex-shrink:0;white-space:nowrap;" onclick="copyOfficeCode()">복사</button>
-        </div>
-        <div style="font-size:12px;color:#6b7280;margin-bottom:6px;">공유 멤버 ${members.length}명</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">${chips}</div>
-        <button class="btn-secondary" style="width:100%;color:#ef4444;" onclick="officeLeave()">사무소 공유 나가기</button>
-      ` : `
-        <div style="font-size:12.5px;color:#6b7280;line-height:1.6;margin-bottom:10px;">같은 사무소 직원끼리 매물을 공유해 함께 관리할 수 있어요. 코드를 만들어 동료에게 알려주거나, 받은 코드로 참여하세요.</div>
-        <button class="btn-primary" style="width:100%;margin-bottom:10px;" onclick="officeGenerate()">우리 사무소 코드 만들기</button>
-        <div style="display:flex;gap:6px;">
-          <input id="office-join-code" class="form-input" type="text" placeholder="사무소 코드 입력" style="flex:1;text-transform:uppercase;">
-          <button class="btn-secondary" style="flex-shrink:0;white-space:nowrap;" onclick="officeJoin()">참여</button>
-        </div>
-      `}
-    </div>`;
+    <button type="button" onclick="openOfficeModal()"
+      style="width:100%;margin:10px 0 2px;padding:14px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;cursor:pointer;
+             display:flex;align-items:center;gap:10px;text-align:left;font-family:inherit;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:800;color:#111827;margin-bottom:3px;display:flex;align-items:center;gap:6px;">${icon('building', 15)} 사무소 매물 공유</div>
+        <div style="font-size:12.5px;color:${code ? '#1a56db' : '#6b7280'};font-weight:${code ? '700' : '400'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${sub}</div>
+      </div>
+      <span style="flex-shrink:0;color:#9ca3af;">${icon('back', 16, 'transform:rotate(180deg);')}</span>
+    </button>`;
+}
+
+// 사무소 공유 상세 모달 (코드/멤버/참여/나가기)
+function openOfficeModal() {
+    document.getElementById('modal-title').textContent = '사무소 매물 공유';
+    renderOfficeModalBody();
+    document.getElementById('modal-footer').innerHTML = `
+      <button class="btn-secondary" style="width:100%;" onclick="backToSettingsFromOffice()">← 설정으로 돌아가기</button>`;
+    showModal();
+}
+
+// 모달 닫고 설정 화면 갱신(요약 문구에 최신 코드/멤버 반영)
+function backToSettingsFromOffice() {
+    closeModal();
+    if (activeTab === 'settings') showSettingsView();
+    else switchTab('settings');
+}
+
+function renderOfficeModalBody() {
+    const body = document.getElementById('modal-body');
+    if (!body) return;
+    const code = state.officeCode;
+    const members = state.officeMembers || [];
+    const chips = members.length
+        ? members.map(m => `<span style="font-size:12px;font-weight:700;color:#374151;background:#f3f4f6;border-radius:999px;padding:5px 11px;">${escapeHtml(m.name || m.nickname || m.uid)}</span>`).join('')
+        : '<span style="color:#9ca3af;font-size:12.5px;">아직 없음</span>';
+
+    body.innerHTML = code ? `
+      <div style="font-size:12.5px;color:#6b7280;line-height:1.6;margin-bottom:10px;">같은 코드를 가진 중개사끼리 매물을 함께 등록·수정하고 공실표까지 공유합니다.</div>
+      <div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:6px;">우리 사무소 코드</div>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:16px;">
+        <div style="flex:1;font-size:20px;font-weight:800;letter-spacing:4px;color:#1a56db;background:#eef4ff;border-radius:10px;padding:12px;text-align:center;">${escapeHtml(code)}</div>
+        <button class="btn-secondary" style="flex-shrink:0;white-space:nowrap;" onclick="copyOfficeCode()">복사</button>
+      </div>
+      <div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:8px;">공유 멤버 ${members.length}명</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;">${chips}</div>
+      <button class="btn-secondary" style="width:100%;color:#ef4444;" onclick="officeLeave()">사무소 공유 나가기</button>
+    ` : `
+      <div style="font-size:12.5px;color:#6b7280;line-height:1.7;margin-bottom:14px;">같은 사무소 직원끼리 매물을 공유해 함께 관리할 수 있어요.<br>코드를 만들어 동료에게 알려주거나, 받은 코드로 참여하세요.</div>
+      <button class="btn-primary" style="width:100%;margin-bottom:16px;" onclick="officeGenerate()">우리 사무소 코드 만들기</button>
+      <div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:6px;">받은 코드로 참여</div>
+      <div style="display:flex;gap:6px;">
+        <input id="office-join-code" class="form-input" type="text" placeholder="사무소 코드 입력" style="flex:1;text-transform:uppercase;">
+        <button class="btn-secondary" style="flex-shrink:0;white-space:nowrap;" onclick="officeJoin()">참여</button>
+      </div>
+    `;
 }
 
 function copyOfficeCode() {
@@ -3559,7 +3594,7 @@ async function officeGenerate() {
     showLoading('사무소 코드를 생성하는 중…');
     try {
         applyOfficeState(await Api.createOffice());
-        showSettingsView();
+        renderOfficeModalBody();   // 모달 내용 갱신 (설정 화면은 모달 닫을 때 갱신)
         await reloadBuildingsAfterOffice();
         showToast('사무소 코드가 생성되었습니다');
     } catch (e) { alert('코드 생성 실패\n\n' + (e.message || '')); }
@@ -3572,7 +3607,7 @@ async function officeJoin() {
     showLoading('사무소에 참여하는 중…');
     try {
         applyOfficeState(await Api.joinOffice(code));
-        showSettingsView();
+        renderOfficeModalBody();
         await reloadBuildingsAfterOffice();
         showToast('사무소에 참여했습니다');
     } catch (e) { alert('참여 실패\n\n' + (e.message || '')); }
@@ -3584,7 +3619,7 @@ async function officeLeave() {
     showLoading('처리 중…');
     try {
         applyOfficeState(await Api.leaveOffice());
-        showSettingsView();
+        renderOfficeModalBody();
         await reloadBuildingsAfterOffice();
         showToast('사무소 공유에서 나갔습니다');
     } catch (e) { alert('실패\n\n' + (e.message || '')); }
