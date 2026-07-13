@@ -14,13 +14,20 @@ google:
       header: ${GOOGLE_CLOUD_URL}
     storage:
       bucket: ${GOOGLE_CLOUD_NAME}
+
 clova:
   speech:
     invoke-url: ${CLOVA_SPEECH_INVOKE_URL}   # NCP CLOVA Speech 도메인의 Invoke URL
     secret: ${CLOVA_SPEECH_SECRET}           # 도메인 Secret Key
+
 gemini:
   api-key: ${GEMINI_API_KEY}
   model: gemini-2.5-flash
+
+vapid:
+  public-key: ${VAPID_PUBLIC_KEY}
+  private-key: ${VAPID_PRIVATE_KEY}
+  subject: ${VAPID_EMAIL}
 
 spring:
   profiles:

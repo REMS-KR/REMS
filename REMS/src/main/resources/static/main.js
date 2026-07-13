@@ -214,6 +214,16 @@ const Api = {
     leaveOffice: () =>
         fetch(`${API_BASE_URL}/user/office/${getUid()}`, { method: 'DELETE', headers: authHeaders() }).then(handleResponse),
 
+    // 푸시 알림 (Web Push / VAPID)
+    getPushPublicKey: () =>
+        fetch(`${API_BASE_URL}/push/public-key`, { headers: authHeaders() }).then(handleResponse),
+    pushSubscribe: (sub) =>
+        fetch(`${API_BASE_URL}/push/subscribe/${getUid()}`, { method: 'POST', headers: authHeaders(true), body: JSON.stringify(sub) }).then(handleResponse),
+    pushUnsubscribe: (endpoint) =>
+        fetch(`${API_BASE_URL}/push/unsubscribe/${getUid()}`, { method: 'POST', headers: authHeaders(true), body: JSON.stringify({ endpoint }) }).then(handleResponse),
+    pushTest: () =>
+        fetch(`${API_BASE_URL}/push/test/${getUid()}`, { method: 'POST', headers: authHeaders() }).then(handleResponse),
+
     // 계약자·임차인 관리 (중개사 전용)
     getTenants: () =>
         fetch(`${API_BASE_URL}/tenant/${getUid()}`, { headers: authHeaders() }).then(handleResponse),
@@ -1336,6 +1346,103 @@ function openBuildingDetail(b) {
 // 로드 시 스타일 미리 주입(모바일 '목록' 버튼 스타일 포함)
 ensureWebDetailStyles();
 ensureWebPanelToggle();
+
+// =====================================================
+// 서비스워커 등록 + 푸시 알림(Web Push)
+// =====================================================
+let _swReg = null;
+let _pushEnabled = false;
+
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    const arr = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+}
+
+async function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return null;
+    try { _swReg = await navigator.serviceWorker.register('sw.js'); return _swReg; }
+    catch (e) { console.error('서비스워커 등록 실패', e); return null; }
+}
+
+async function pushIsEnabled() {
+    try {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (!reg) return false;
+        return !!(await reg.pushManager.getSubscription());
+    } catch (_) { return false; }
+}
+
+async function enablePush() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+        alert('이 브라우저는 푸시 알림을 지원하지 않습니다.'); return;
+    }
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { alert('알림 권한이 허용되지 않았습니다.\n브라우저 설정에서 알림을 허용해주세요.'); return; }
+    showLoading('푸시 알림을 설정하는 중…');
+    try {
+        const reg = (await navigator.serviceWorker.getRegistration()) || await registerServiceWorker();
+        await navigator.serviceWorker.ready;
+        const { publicKey } = await Api.getPushPublicKey();
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+            sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+        }
+        await Api.pushSubscribe(sub.toJSON());
+        _pushEnabled = true;
+        showToast('푸시 알림이 켜졌습니다');
+        refreshPushCard();
+    } catch (e) {
+        alert('푸시 설정 실패\n\n' + (e.message || e));
+    } finally { hideLoading(); }
+}
+
+async function disablePush() {
+    showLoading('푸시 알림을 끄는 중…');
+    try {
+        const reg = await navigator.serviceWorker.getRegistration();
+        const sub = reg && await reg.pushManager.getSubscription();
+        if (sub) {
+            try { await Api.pushUnsubscribe(sub.endpoint); } catch (_) {}
+            await sub.unsubscribe();
+        }
+        _pushEnabled = false;
+        showToast('푸시 알림이 꺼졌습니다');
+        refreshPushCard();
+    } catch (e) {
+        alert('해제 실패\n\n' + (e.message || e));
+    } finally { hideLoading(); }
+}
+
+async function testPush() {
+    try { await Api.pushTest(); showToast('테스트 알림을 보냈습니다'); }
+    catch (e) { alert('테스트 발송 실패\n\n' + (e.message || e)); }
+}
+
+async function refreshPushCard() {
+    _pushEnabled = await pushIsEnabled();
+    const el = document.getElementById('push-card');
+    if (el) el.innerHTML = pushCardHTML();
+}
+
+function pushCardHTML() {
+    const bell = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
+    return `
+      <div style="font-size:13px;font-weight:800;color:#111827;margin-bottom:4px;display:flex;align-items:center;gap:6px;">${bell} 푸시 알림</div>
+      <div style="font-size:12.5px;color:#6b7280;line-height:1.6;margin-bottom:10px;">미팅·본계약 1시간 전, 잔금·입주 당일 아침에 알림을 받습니다.</div>
+      ${_pushEnabled
+        ? `<button class="btn-secondary" style="width:100%;color:#ef4444;" onclick="disablePush()">알림 끄기</button>
+           <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="testPush()">테스트 알림 보내기</button>`
+        : `<button class="btn-primary" style="width:100%;" onclick="enablePush()">알림 켜기</button>`}
+    `;
+}
+
+// 로드 시 서비스워커 등록 + 현재 푸시 구독 상태 확인
+try { registerServiceWorker().then(() => { pushIsEnabled().then(v => { _pushEnabled = v; }); }); } catch (_) {}
 
 function selectBuilding(id) {
     if (!myPerms().canRead) { showToast('조회 권한이 없습니다'); return; }
@@ -2970,6 +3077,10 @@ function showCustomerDetail(id) {
       ${row('입주 희망일', c.moveInDate)}
       ${row('미팅 날짜', c.meetingDate)}
       ${row('대출', c.loan)}
+      ${row('미팅 일시', c.meetingAt ? String(c.meetingAt).slice(0, 16).replace('T', ' ') : '')}
+      ${row('본계약 일시', c.contractAt ? String(c.contractAt).slice(0, 16).replace('T', ' ') : '')}
+      ${row('잔금일', c.balanceOn ? String(c.balanceOn).slice(0, 10) : '')}
+      ${row('입주일', c.moveInOn ? String(c.moveInOn).slice(0, 10) : '')}
       ${c.memo ? `<div style="padding:10px 0;border-bottom:1px solid #f1f3f5;"><div style="color:#6b7280;font-size:13px;margin-bottom:5px;">메모</div><div style="color:#111827;font-size:13px;line-height:1.6;white-space:pre-wrap;">${escapeHtml(c.memo)}</div></div>` : ''}
       <div style="padding:12px 0 2px;">
         <div style="color:#6b7280;font-size:13px;margin-bottom:8px;">연결된 매물</div>
@@ -2992,6 +3103,8 @@ function openCustomerForm(id, prefill) {
     const isEdit = !!id;
     document.getElementById('modal-title').textContent = isEdit ? '고객 수정' : '고객 등록';
     const v = k => (c && c[k] != null) ? escapeHtml(String(c[k])) : '';
+    const dtLocal = k => (c && c[k]) ? String(c[k]).slice(0, 16) : '';   // datetime-local 값(yyyy-MM-ddTHH:mm)
+    const dOnly = k => (c && c[k]) ? String(c[k]).slice(0, 10) : '';     // date 값(yyyy-MM-dd)
     const sens = (c && c.sensitivity) ? c.sensitivity : '';
     const sBtn = (key, label) => `<button type="button" onclick="cfSetSens('${key}')" data-sens="${key}" class="cf-sens-btn" style="flex:1;padding:9px 0;border-radius:8px;border:1px solid #e5e7eb;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;${sens === key ? `background:${CUST_SENS[key].bg};color:${CUST_SENS[key].fg};border-color:${CUST_SENS[key].fg};` : 'background:#fff;color:#6b7280;'}">${label}</button>`;
     document.getElementById('modal-body').innerHTML = `
@@ -3027,6 +3140,20 @@ function openCustomerForm(id, prefill) {
       <div class="form-group"><label class="form-label">메모</label>
         <textarea id="cf-memo" class="form-textarea" style="min-height:60px;" placeholder="특이사항">${v('memo')}</textarea>
       </div>
+
+      <div style="margin:6px 2px 8px;padding-top:12px;border-top:1px solid #f1f3f5;font-size:13px;font-weight:800;color:#111827;">일정 알림 <span style="font-weight:400;color:#9ca3af;font-size:12px;">· 입력하면 자동으로 푸시 알림</span></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">미팅 일시</label>
+          <input id="cf-meetingAt" class="form-input" type="datetime-local" value="${dtLocal('meetingAt')}"></div>
+        <div class="form-group"><label class="form-label">본계약 일시</label>
+          <input id="cf-contractAt" class="form-input" type="datetime-local" value="${dtLocal('contractAt')}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">잔금일</label>
+          <input id="cf-balanceOn" class="form-input" type="date" value="${dOnly('balanceOn')}"></div>
+        <div class="form-group"><label class="form-label">입주일</label>
+          <input id="cf-moveInOn" class="form-input" type="date" value="${dOnly('moveInOn')}"></div>
+      </div>
     `;
     document.getElementById('modal-footer').innerHTML = `
       <button class="btn-secondary" onclick="${isEdit ? `showCustomerDetail('${c.id}')` : 'closeModal()'}">취소</button>
@@ -3059,7 +3186,11 @@ async function saveCustomer(id) {
         moveInDate: g('cf-move'),
         meetingDate: g('cf-meeting'),
         loan: g('cf-loan'),
-        memo: g('cf-memo')
+        memo: g('cf-memo'),
+        meetingAt: g('cf-meetingAt') || null,    // yyyy-MM-ddTHH:mm (오전/오후 포함)
+        contractAt: g('cf-contractAt') || null,
+        balanceOn: g('cf-balanceOn') || null,     // yyyy-MM-dd
+        moveInOn: g('cf-moveInOn') || null
     };
     if (!dto.summary && !dto.phone) { showToast('AI 요약 또는 전화번호를 입력하세요'); return; }
     showLoading(id ? '고객 정보를 저장하는 중…' : '고객을 등록하는 중…');
@@ -3303,6 +3434,7 @@ function showSettingsView() {
       <!-- [E] edit by smsong -->
 
       ${isBroker() ? officeCardHTML() : ''}
+      ${isBroker() ? `<div id="push-card" style="width:100%;margin:10px 0 2px;padding:14px;border:1px solid #e5e7eb;border-radius:14px;text-align:left;background:#fff;">${pushCardHTML()}</div>` : ''}
 
 
       <input type="file" id="profile-file" accept="image/*" style="display:none" onchange="changeProfilePhoto(event)">
@@ -3315,6 +3447,7 @@ function showSettingsView() {
       </div>
     </div>
   `;
+    if (isBroker()) refreshPushCard();
 }
 
 // =====================================================

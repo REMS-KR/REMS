@@ -66,6 +66,10 @@ dependencies {
 
 	// 오디오 변환
 	implementation 'ws.schild:jave-all-deps:3.5.0'
+
+	// Web Push (VAPID) — 푸시 알림
+	implementation 'nl.martijndwars:web-push:5.1.1'
+	implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
 }
 
 dependencyManagement {

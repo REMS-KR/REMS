@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,6 +41,18 @@ public class CustomerEntity {
 
     @Column(length = 1000)
     private String memo;            // 메모
+
+    // ===== 푸시 알림용 일정 (구조화) =====
+    private LocalDateTime meetingAt;   // 미팅 일시 (오전/오후 포함) → 1시간 전 알림
+    private LocalDateTime contractAt;  // 본계약 일시 → 1시간 전 알림
+    private LocalDate balanceOn;       // 잔금일 → 당일 알림
+    private LocalDate moveInOn;        // 입주일 → 당일 알림
+
+    // 중복 발송 방지 플래그
+    @Builder.Default private Boolean notifiedMeeting = false;
+    @Builder.Default private Boolean notifiedContract = false;
+    @Builder.Default private Boolean notifiedBalance = false;
+    @Builder.Default private Boolean notifiedMoveIn = false;
 
     // 이 고객에게 연결(추천)된 매물 건물 id 목록
     @ElementCollection

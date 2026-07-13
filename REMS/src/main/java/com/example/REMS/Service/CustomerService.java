@@ -113,6 +113,15 @@ public class CustomerService {
         e.setLoan(dto.getLoan());
         e.setMeetingDate(dto.getMeetingDate());
         e.setMemo(dto.getMemo());
+        // 알림용 일정 — 값이 바뀌면 재발송을 위해 플래그 초기화
+        java.time.LocalDateTime nMeet = CustomerDTO.parseDateTime(dto.getMeetingAt());
+        if (!java.util.Objects.equals(nMeet, e.getMeetingAt())) { e.setMeetingAt(nMeet); e.setNotifiedMeeting(false); }
+        java.time.LocalDateTime nCon = CustomerDTO.parseDateTime(dto.getContractAt());
+        if (!java.util.Objects.equals(nCon, e.getContractAt())) { e.setContractAt(nCon); e.setNotifiedContract(false); }
+        java.time.LocalDate nBal = CustomerDTO.parseDate(dto.getBalanceOn());
+        if (!java.util.Objects.equals(nBal, e.getBalanceOn())) { e.setBalanceOn(nBal); e.setNotifiedBalance(false); }
+        java.time.LocalDate nMove = CustomerDTO.parseDate(dto.getMoveInOn());
+        if (!java.util.Objects.equals(nMove, e.getMoveInOn())) { e.setMoveInOn(nMove); e.setNotifiedMoveIn(false); }
         logger.info("고객 수정 완료! 작성자: {}, id={}", uid, id);
         return CustomerDTO.entityToDto(e);
     }
