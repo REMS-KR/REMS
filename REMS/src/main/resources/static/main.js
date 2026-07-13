@@ -1451,7 +1451,7 @@ function pushCardHTML() {
       <div style="display:flex;align-items:center;gap:10px;">
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:800;color:#111827;margin-bottom:3px;display:flex;align-items:center;gap:6px;">${bell} 푸시 알림</div>
-          <div style="font-size:12.5px;color:#6b7280;line-height:1.55;">미팅·본계약 1시간 전, 잔금·입주 당일 아침에 알림을 받습니다.</div>
+          <div style="font-size:12.5px;color:#6b7280;line-height:1.55;">미팅·본계약 1시간 전, 잔금·입주 당일 오전 11시에 알림을 받습니다.</div>
         </div>
         <button type="button" role="switch" aria-checked="${on}" onclick="togglePush()" title="알림 ${on ? '끄기' : '켜기'}"
           style="flex-shrink:0;position:relative;width:50px;height:29px;border:none;border-radius:999px;cursor:pointer;padding:0;
@@ -1503,7 +1503,7 @@ function showPushOptInModal() {
         <div style="font-size:15px;font-weight:800;color:#111827;margin-bottom:8px;">중요한 일정을 놓치지 마세요</div>
         <div style="font-size:13px;color:#6b7280;line-height:1.7;">
           고객 <b style="color:#374151;">미팅·본계약 1시간 전</b>,<br>
-          <b style="color:#374151;">잔금·입주 당일</b>에 알림을 보내드립니다.
+          <b style="color:#374151;">잔금·입주 당일 오전 11시</b>에 알림을 보내드립니다.
         </div>
         <div style="margin-top:14px;padding:10px 12px;background:#f8faff;border-radius:10px;font-size:12px;color:#6b7280;line-height:1.6;">
           ‘알림 켜기’를 누르면 브라우저 알림 권한을 요청합니다.<br>나중에 설정에서 언제든 끌 수 있어요.
@@ -1590,7 +1590,7 @@ function renderNotifications(list) {
         body.innerHTML = `<div style="padding:36px 20px;text-align:center;color:#9ca3af;">
             <div style="font-size:34px;margin-bottom:8px;">🔔</div>
             <div style="font-size:13.5px;font-weight:600;color:#6b7280;">아직 알림이 없습니다</div>
-            <div style="font-size:12px;margin-top:6px;line-height:1.6;">고객의 미팅·본계약 1시간 전,<br>잔금·입주 당일에 알림을 보내드립니다.</div>
+            <div style="font-size:12px;margin-top:6px;line-height:1.6;">고객의 미팅·본계약 1시간 전,<br>잔금·입주 당일 오전 11시에 알림을 보내드립니다.</div>
         </div>`;
         document.getElementById('modal-footer').innerHTML = '';
         return;

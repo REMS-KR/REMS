@@ -40,7 +40,7 @@ public class CustomerNotificationScheduler {
     }
 
     // 매 분 실행 — 미팅/본계약 1시간 전
-    @Scheduled(cron = "0 * * * * *")
+    @Scheduled(cron = "0 * * * * *", zone = "Asia/Seoul")
     @Transactional
     public void notifyOneHourBefore() {
         LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES);
@@ -68,8 +68,8 @@ public class CustomerNotificationScheduler {
         }
     }
 
-    // 매일 오전 9시 — 잔금/입주 당일 알림
-    @Scheduled(cron = "0 0 9 * * *")
+    // 매일 오전 11시 — 잔금/입주 당일 알림
+    @Scheduled(cron = "0 0 11 * * *", zone = "Asia/Seoul")
     @Transactional
     public void notifyToday() {
         LocalDate today = LocalDate.now();
