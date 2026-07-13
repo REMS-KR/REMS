@@ -3664,11 +3664,11 @@ function showSettingsView() {
 
       <input type="file" id="profile-file" accept="image/*" style="display:none" onchange="changeProfilePhoto(event)">
       <div class="profile-actions">
+        ${isAdminUser() ? `<button class="btn-secondary" onclick="openPermissionManager()" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;">${icon('lock',16)} 권한 관리</button>` : ''}
         <button class="btn-secondary" onclick="document.getElementById('profile-file').click()" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;">${icon('camera',16)} 프로필 사진 변경</button>
         <button class="btn-secondary" onclick="openProfileEdit()" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;">${icon('edit',16)} 내 정보 수정</button>
         <button class="btn-secondary" onclick="openTrash()" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;">${icon('trash',16)} 휴지통</button>
         <button class="profile-logout" onclick="confirmLogout()">로그아웃</button>
-        ${isAdminUser() ? `<button class="btn-secondary" onclick="openPermissionManager()" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;margin-top:4px;">${icon('lock',16)} 권한 관리</button>` : ''}
       </div>
     </div>
   `;
@@ -3707,7 +3707,11 @@ function renderPermissionList(list) {
             return `
       <div class="perm-row" data-user-id="${u.userId}">
         <div class="perm-user">
-          <div class="perm-name">${escapeHtml(u.name || u.nickname || u.uid)}${u.admin ? '<span class="perm-admin">관리자</span>' : ''}</div>
+          <div class="perm-name" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span>${escapeHtml(u.name || u.nickname || u.uid)}</span>
+            ${u.provider ? providerBadge(u.provider) : ''}
+            ${u.admin ? '<span class="perm-admin">관리자</span>' : ''}
+          </div>
         </div>
         ${u.admin ? '<span class="perm-locked">관리자 (고정)</span>' : `
         <div class="perm-toggles" role="group">

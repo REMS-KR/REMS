@@ -18,6 +18,7 @@ public class UserPermissionDTO {
     private String name;
     private String nickname;
     private String profileURL;
+    private String provider;     // kakao / naver / google (소셜 로그인 표시용)
     private Boolean admin;       // 관리자 여부(uid 고정)
     private String role;         // regular / broker / admin
     private Boolean canCreate;

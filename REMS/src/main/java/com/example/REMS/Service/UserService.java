@@ -191,6 +191,7 @@ public class UserService {
                 .name(user.getName())
                 .nickname(user.getNickname())
                 .profileURL(user.getProfileURL())
+                .provider(user.getProvider())   // 소셜 로그인 표시용
                 .admin(admin)
                 .role(role)
                 // 역할에서 파생: 일반=조회만, 중개인·관리자=전부
