@@ -42,7 +42,12 @@ self.addEventListener('push', (event) => {
     tag: data.tag || undefined,
     renotify: !!data.tag
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil((async () => {
+    await self.registration.showNotification(title, options);
+    // 열려 있는 앱 화면에 알림 도착을 알려 배지를 갱신하게 함
+    const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    list.forEach(c => c.postMessage({ type: 'push-received' }));
+  })());
 });
 
 self.addEventListener('notificationclick', (event) => {

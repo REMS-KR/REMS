@@ -30,22 +30,28 @@ public class PushService {
 
     private static final Logger logger = LoggerFactory.getLogger(PushService.class);
 
-    @Value("${push.vapid.public-key}")
+    @Value("${push.vapid.public-key:}")
     private String publicKey;
 
-    @Value("${push.vapid.private-key}")
+    @Value("${push.vapid.private-key:}")
     private String privateKey;
 
     @Value("${push.vapid.subject:mailto:admin@haekbangnote.app}")
     private String subject;
 
     private final PushSubscriptionRepository subscriptionRepository;
+    private final com.example.REMS.Repository.NotificationRepository notificationRepository;
     private final ObjectMapper om = new ObjectMapper();
 
     private nl.martijndwars.webpush.PushService pushService;
 
     @PostConstruct
     public void init() {
+        if (publicKey == null || publicKey.isBlank() || privateKey == null || privateKey.isBlank()) {
+            logger.warn("VAPID 키가 설정되지 않아 푸시 알림이 비활성화됩니다. " +
+                    "application.yml 의 push.vapid.public-key / private-key 를 확인하세요.");
+            return;   // 앱은 정상 기동 (푸시만 비활성)
+        }
         if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
             Security.addProvider(new BouncyCastleProvider());
         }
@@ -67,7 +73,24 @@ public class PushService {
     /** 특정 사용자의 모든 구독 기기에 알림 발송. title/body 는 SW 가 그대로 표시. */
     @Transactional
     public void sendToUser(String uid, String title, String body) {
-        if (uid == null || pushService == null) return;
+        sendToUser(uid, title, body, null);
+    }
+
+    /** type: meeting/contract/balance/movein/test — 알림 목록 분류용 */
+    @Transactional
+    public void sendToUser(String uid, String title, String body, String type) {
+        if (uid == null) return;
+
+        // 1) 알림 이력 저장 (푸시 미설정/미구독이어도 앱 '알림' 목록에는 남는다)
+        try {
+            notificationRepository.save(com.example.REMS.Entity.NotificationEntity.builder()
+                    .uid(uid).title(title).body(body).type(type).readFlag(false).build());
+        } catch (Exception e) {
+            logger.warn("알림 이력 저장 실패 - uid={}", uid, e);
+        }
+
+        // 2) Web Push 발송
+        if (pushService == null) return;   // VAPID 미설정 → 푸시 스킵
         var subs = subscriptionRepository.findByUid(uid);
         if (subs.isEmpty()) return;
 

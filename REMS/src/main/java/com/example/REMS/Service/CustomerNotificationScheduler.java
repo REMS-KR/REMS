@@ -51,7 +51,7 @@ public class CustomerNotificationScheduler {
                 .findByMeetingAtBetweenAndNotifiedMeetingFalse(start, end);
         for (CustomerEntity c : meetings) {
             String uid = ownerUid(c);
-            if (uid != null) pushService.sendToUser(uid, "핵방노트", "1시간 뒤 " + nameOf(c) + "님과 미팅이 있습니다");
+            if (uid != null) pushService.sendToUser(uid, "핵방노트", "1시간 뒤 " + nameOf(c) + "님과 미팅이 있습니다", "meeting");
             c.setNotifiedMeeting(true);
         }
 
@@ -59,7 +59,7 @@ public class CustomerNotificationScheduler {
                 .findByContractAtBetweenAndNotifiedContractFalse(start, end);
         for (CustomerEntity c : contracts) {
             String uid = ownerUid(c);
-            if (uid != null) pushService.sendToUser(uid, "핵방노트", "1시간 뒤 " + nameOf(c) + "님 본계약이 있습니다");
+            if (uid != null) pushService.sendToUser(uid, "핵방노트", "1시간 뒤 " + nameOf(c) + "님 본계약이 있습니다", "contract");
             c.setNotifiedContract(true);
         }
 
@@ -78,7 +78,7 @@ public class CustomerNotificationScheduler {
                 .findByBalanceOnAndNotifiedBalanceFalse(today);
         for (CustomerEntity c : balances) {
             String uid = ownerUid(c);
-            if (uid != null) pushService.sendToUser(uid, "핵방노트", "오늘은 " + nameOf(c) + "님 잔금이 있습니다");
+            if (uid != null) pushService.sendToUser(uid, "핵방노트", "오늘은 " + nameOf(c) + "님 잔금이 있습니다", "balance");
             c.setNotifiedBalance(true);
         }
 
@@ -86,7 +86,7 @@ public class CustomerNotificationScheduler {
                 .findByMoveInOnAndNotifiedMoveInFalse(today);
         for (CustomerEntity c : moveIns) {
             String uid = ownerUid(c);
-            if (uid != null) pushService.sendToUser(uid, "핵방노트", "오늘은 " + nameOf(c) + "님 입주가 있습니다");
+            if (uid != null) pushService.sendToUser(uid, "핵방노트", "오늘은 " + nameOf(c) + "님 입주가 있습니다", "movein");
             c.setNotifiedMoveIn(true);
         }
 

@@ -27,6 +27,7 @@ public class PushController {
 
     private final PushService pushService;
     private final PushSubscriptionRepository subscriptionRepository;
+    private final com.example.REMS.Repository.NotificationRepository notificationRepository;
 
     // 공개키는 인증 없이 접근 가능해야 함 (SecurityConfig 에서 permitAll 필요)
     @Operation(summary = "VAPID 공개키 조회")
@@ -78,7 +79,57 @@ public class PushController {
     public ResponseEntity<Map<String, Object>> test(@PathVariable("uid") String uid,
                                                     @AuthenticationPrincipal UserDetails userDetails) {
         checkAuth(uid, userDetails);
-        pushService.sendToUser(uid, "핵방노트", "푸시 알림이 정상적으로 설정되었습니다 🎉");
+        pushService.sendToUser(uid, "핵방노트", "푸시 알림이 정상적으로 설정되었습니다 🎉", "test");
+        return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    // ===== 알림 목록 =====
+    @Operation(summary = "알림 목록 (최근 50건)")
+    @GetMapping("/notifications/{uid}")
+    public ResponseEntity<java.util.List<Map<String, Object>>> list(@PathVariable("uid") String uid,
+                                                                    @AuthenticationPrincipal UserDetails userDetails) {
+        checkAuth(uid, userDetails);
+        var list = notificationRepository.findTop50ByUidOrderByIdDesc(uid).stream().map(n -> {
+            Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("id", n.getId());
+            m.put("title", n.getTitle());
+            m.put("body", n.getBody());
+            m.put("type", n.getType());
+            m.put("read", Boolean.TRUE.equals(n.getReadFlag()));
+            m.put("createdAt", n.getCreatedAt() != null
+                    ? n.getCreatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() : null);
+            return m;
+        }).toList();
+        return ResponseEntity.ok(list);
+    }
+
+    @Operation(summary = "안 읽은 알림 개수")
+    @GetMapping("/notifications/{uid}/unread-count")
+    public ResponseEntity<Map<String, Object>> unreadCount(@PathVariable("uid") String uid,
+                                                           @AuthenticationPrincipal UserDetails userDetails) {
+        checkAuth(uid, userDetails);
+        return ResponseEntity.ok(Map.of("count", notificationRepository.countByUidAndReadFlagFalse(uid)));
+    }
+
+    @Operation(summary = "알림 전체 읽음 처리")
+    @PostMapping("/notifications/{uid}/read-all")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> readAll(@PathVariable("uid") String uid,
+                                                       @AuthenticationPrincipal UserDetails userDetails) {
+        checkAuth(uid, userDetails);
+        var list = notificationRepository.findByUidAndReadFlagFalse(uid);
+        list.forEach(n -> n.setReadFlag(true));
+        notificationRepository.saveAll(list);
+        return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    @Operation(summary = "알림 전체 삭제")
+    @DeleteMapping("/notifications/{uid}")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> clear(@PathVariable("uid") String uid,
+                                                     @AuthenticationPrincipal UserDetails userDetails) {
+        checkAuth(uid, userDetails);
+        notificationRepository.deleteAll(notificationRepository.findTop50ByUidOrderByIdDesc(uid));
         return ResponseEntity.ok(Map.of("ok", true));
     }
 

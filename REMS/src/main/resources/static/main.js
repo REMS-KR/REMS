@@ -223,6 +223,14 @@ const Api = {
         fetch(`${API_BASE_URL}/push/unsubscribe/${getUid()}`, { method: 'POST', headers: authHeaders(true), body: JSON.stringify({ endpoint }) }).then(handleResponse),
     pushTest: () =>
         fetch(`${API_BASE_URL}/push/test/${getUid()}`, { method: 'POST', headers: authHeaders() }).then(handleResponse),
+    getNotifications: () =>
+        fetch(`${API_BASE_URL}/push/notifications/${getUid()}`, { headers: authHeaders() }).then(handleResponse),
+    getUnreadCount: () =>
+        fetch(`${API_BASE_URL}/push/notifications/${getUid()}/unread-count`, { headers: authHeaders() }).then(handleResponse),
+    readAllNotifications: () =>
+        fetch(`${API_BASE_URL}/push/notifications/${getUid()}/read-all`, { method: 'POST', headers: authHeaders() }).then(handleResponse),
+    clearNotifications: () =>
+        fetch(`${API_BASE_URL}/push/notifications/${getUid()}`, { method: 'DELETE', headers: authHeaders() }).then(handleResponse),
 
     // 계약자·임차인 관리 (중개사 전용)
     getTenants: () =>
@@ -1443,6 +1451,106 @@ function pushCardHTML() {
 
 // 로드 시 서비스워커 등록 + 현재 푸시 구독 상태 확인
 try { registerServiceWorker().then(() => { pushIsEnabled().then(v => { _pushEnabled = v; }); }); } catch (_) {}
+
+// =====================================================
+// 알림 목록 (상단바 벨 버튼)
+// =====================================================
+const NOTI_ICONS = {
+    meeting:  { emoji: '🤝', label: '미팅' },
+    contract: { emoji: '📝', label: '본계약' },
+    balance:  { emoji: '💰', label: '잔금' },
+    movein:   { emoji: '🔑', label: '입주' },
+    test:     { emoji: '🔔', label: '테스트' }
+};
+
+function notiTimeLabel(ms) {
+    if (!ms) return '';
+    const d = new Date(ms);
+    const diff = Date.now() - ms;
+    if (diff < 60000) return '방금';
+    if (diff < 3600000) return Math.floor(diff / 60000) + '분 전';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + '시간 전';
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getMonth() + 1}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// 안 읽은 개수 배지 갱신
+async function refreshNotiBadge() {
+    const badge = document.getElementById('noti-badge');
+    if (!badge) return;
+    try {
+        const r = await Api.getUnreadCount();
+        const n = (r && r.count) ? Number(r.count) : 0;
+        if (n > 0) { badge.style.display = 'block'; badge.textContent = n > 99 ? '99+' : String(n); }
+        else { badge.style.display = 'none'; }
+    } catch (_) { badge.style.display = 'none'; }
+}
+
+async function openNotifications() {
+    document.getElementById('modal-title').textContent = '알림';
+    document.getElementById('modal-body').innerHTML = `<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">불러오는 중…</div>`;
+    document.getElementById('modal-footer').innerHTML = '';
+    showModal();
+    try {
+        const list = await Api.getNotifications();
+        renderNotifications(list || []);
+        try { await Api.readAllNotifications(); refreshNotiBadge(); } catch (_) {}
+    } catch (e) {
+        document.getElementById('modal-body').innerHTML =
+            `<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">알림을 불러오지 못했습니다<br><span style="font-size:12px;">${escapeHtml(e.message || '')}</span></div>`;
+    }
+}
+
+function renderNotifications(list) {
+    const body = document.getElementById('modal-body');
+    if (!body) return;
+    if (!list.length) {
+        body.innerHTML = `<div style="padding:36px 20px;text-align:center;color:#9ca3af;">
+            <div style="font-size:34px;margin-bottom:8px;">🔔</div>
+            <div style="font-size:13.5px;font-weight:600;color:#6b7280;">아직 알림이 없습니다</div>
+            <div style="font-size:12px;margin-top:6px;line-height:1.6;">고객의 미팅·본계약 1시간 전,<br>잔금·입주 당일에 알림을 보내드립니다.</div>
+        </div>`;
+        document.getElementById('modal-footer').innerHTML = '';
+        return;
+    }
+    body.innerHTML = list.map(n => {
+        const meta = NOTI_ICONS[n.type] || { emoji: '🔔', label: '' };
+        const unread = !n.read;
+        return `<div style="display:flex;gap:10px;padding:12px 10px;border-bottom:1px solid #f1f3f5;${unread ? 'background:#f8faff;' : ''}border-radius:8px;">
+          <div style="flex-shrink:0;font-size:19px;line-height:1.3;">${meta.emoji}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13.5px;font-weight:700;color:#111827;line-height:1.5;">${escapeHtml(n.body || '')}</div>
+            <div style="font-size:11.5px;color:#9ca3af;margin-top:3px;">
+              ${meta.label ? `<span style="color:#1a56db;font-weight:700;">${meta.label}</span> · ` : ''}${notiTimeLabel(n.createdAt)}
+            </div>
+          </div>
+          ${unread ? `<span style="flex-shrink:0;width:7px;height:7px;border-radius:50%;background:#1a56db;margin-top:6px;"></span>` : ''}
+        </div>`;
+    }).join('');
+    document.getElementById('modal-footer').innerHTML = `
+      <button class="btn-secondary" style="width:100%;color:#ef4444;" onclick="clearNotifications()">알림 전체 삭제</button>`;
+}
+
+async function clearNotifications() {
+    if (!confirm('알림을 모두 삭제하시겠습니까?')) return;
+    try {
+        await Api.clearNotifications();
+        renderNotifications([]);
+        refreshNotiBadge();
+        showToast('알림을 삭제했습니다');
+    } catch (e) { alert('삭제 실패\n\n' + (e.message || '')); }
+}
+
+// 로드 후 배지 갱신 + 1분마다 폴링
+try {
+    setTimeout(refreshNotiBadge, 1200);
+    setInterval(refreshNotiBadge, 60000);
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', (e) => {
+            if (e.data && e.data.type === 'push-received') refreshNotiBadge();
+        });
+    }
+} catch (_) {}
 
 function selectBuilding(id) {
     if (!myPerms().canRead) { showToast('조회 권한이 없습니다'); return; }
