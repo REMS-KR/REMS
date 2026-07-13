@@ -127,6 +127,7 @@ function logout() {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('currentUser');
     localStorage.removeItem('auth');
+    localStorage.removeItem('pushAsked');   // 다음 로그인 사용자에게 알림 안내 다시 노출
 }
 
 // ★ 메인 페이지 진입 즉시 토큰 확인 — 없거나 만료면 안내 후 login.html로 이동
@@ -788,7 +789,7 @@ async function initMap() {
     // 현재 위치 추적 시작(파란 점). iOS가 아니면 나침반도 바로 연결
     startGeolocationTracking();
     if (!(typeof DeviceOrientationEvent !== 'undefined' &&
-          typeof DeviceOrientationEvent.requestPermission === 'function')) {
+        typeof DeviceOrientationEvent.requestPermission === 'function')) {
         ensureOrientationPermission();
     }
 
@@ -814,13 +815,13 @@ function gotoMyLocation() {
 function centerOnCurrentLocationOnce() {
     if (!navigator.geolocation || !map) return;
     navigator.geolocation.getCurrentPosition(pos => {
-        if (_suppressAutoCenter) return;     // 그 사이 사용자가 지도를 조작했으면 중단
-        const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
-        updateGeoMarker(latlng, pos.coords.heading);
-        map.setCenter(latlng);
-        map.setZoom(16);
-    }, () => { /* 거부/실패 → 기본 서울 중심 유지 */ },
-       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+            if (_suppressAutoCenter) return;     // 그 사이 사용자가 지도를 조작했으면 중단
+            const latlng = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+            updateGeoMarker(latlng, pos.coords.heading);
+            map.setCenter(latlng);
+            map.setZoom(16);
+        }, () => { /* 거부/실패 → 기본 서울 중심 유지 */ },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
 }
 
 // =====================================================
@@ -1387,10 +1388,14 @@ async function pushIsEnabled() {
 
 async function enablePush() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-        alert('이 브라우저는 푸시 알림을 지원하지 않습니다.'); return;
+        alert('이 브라우저는 푸시 알림을 지원하지 않습니다.'); return false;
     }
-    const perm = await Notification.requestPermission();
-    if (perm !== 'granted') { alert('알림 권한이 허용되지 않았습니다.\n브라우저 설정에서 알림을 허용해주세요.'); return; }
+    const perm = await Notification.requestPermission();   // ← OS/브라우저 알림 권한 요청
+    if (perm !== 'granted') {
+        alert('알림 권한이 허용되지 않았습니다.\n브라우저(또는 휴대폰) 설정에서 알림을 허용해주세요.');
+        refreshPushCard();
+        return false;
+    }
     showLoading('푸시 알림을 설정하는 중…');
     try {
         const reg = (await navigator.serviceWorker.getRegistration()) || await registerServiceWorker();
@@ -1404,8 +1409,10 @@ async function enablePush() {
         _pushEnabled = true;
         showToast('푸시 알림이 켜졌습니다');
         refreshPushCard();
+        return true;
     } catch (e) {
         alert('푸시 설정 실패\n\n' + (e.message || e));
+        return false;
     } finally { hideLoading(); }
 }
 
@@ -1439,18 +1446,93 @@ async function refreshPushCard() {
 
 function pushCardHTML() {
     const bell = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
+    const on = !!_pushEnabled;
     return `
-      <div style="font-size:13px;font-weight:800;color:#111827;margin-bottom:4px;display:flex;align-items:center;gap:6px;">${bell} 푸시 알림</div>
-      <div style="font-size:12.5px;color:#6b7280;line-height:1.6;margin-bottom:10px;">미팅·본계약 1시간 전, 잔금·입주 당일 아침에 알림을 받습니다.</div>
-      ${_pushEnabled
-        ? `<button class="btn-secondary" style="width:100%;color:#ef4444;" onclick="disablePush()">알림 끄기</button>
-           <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="testPush()">테스트 알림 보내기</button>`
-        : `<button class="btn-primary" style="width:100%;" onclick="enablePush()">알림 켜기</button>`}
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:800;color:#111827;margin-bottom:3px;display:flex;align-items:center;gap:6px;">${bell} 푸시 알림</div>
+          <div style="font-size:12.5px;color:#6b7280;line-height:1.55;">미팅·본계약 1시간 전, 잔금·입주 당일 아침에 알림을 받습니다.</div>
+        </div>
+        <button type="button" role="switch" aria-checked="${on}" onclick="togglePush()" title="알림 ${on ? '끄기' : '켜기'}"
+          style="flex-shrink:0;position:relative;width:50px;height:29px;border:none;border-radius:999px;cursor:pointer;padding:0;
+                 background:${on ? '#1a56db' : '#d1d5db'};transition:background .25s ease;">
+          <span style="position:absolute;top:3px;left:3px;width:23px;height:23px;border-radius:50%;background:#fff;
+                       box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform .25s cubic-bezier(0.32,0.72,0,1);
+                       transform:translateX(${on ? '21px' : '0'});"></span>
+        </button>
+      </div>
+      ${on ? `<button class="btn-secondary" style="width:100%;margin-top:12px;" onclick="testPush()">테스트 알림 보내기</button>` : ''}
     `;
 }
 
-// 로드 시 서비스워커 등록 + 현재 푸시 구독 상태 확인
-try { registerServiceWorker().then(() => { pushIsEnabled().then(v => { _pushEnabled = v; }); }); } catch (_) {}
+// 토글 — 켜져 있으면 끄고, 꺼져 있으면 켠다
+async function togglePush() {
+    if (_pushEnabled) await disablePush();
+    else await enablePush();
+}
+
+// =====================================================
+// 최초 접속 시 알림 켜기 안내 (1회만)
+// =====================================================
+const PUSH_ASKED_KEY = 'pushAsked';
+
+async function maybeAskPushOnFirstVisit() {
+    try {
+        if (localStorage.getItem(PUSH_ASKED_KEY)) return;                    // 이미 물어봤음
+        if (!getUid()) return;                                               // 로그인 상태에서만
+        if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+        if (Notification.permission === 'denied') return;                    // 이미 차단 → 묻지 않음
+        if (await pushIsEnabled()) return;                                   // 이미 구독됨
+
+        // iOS 는 홈 화면에 추가된 PWA 에서만 웹푸시 지원 → 브라우저 탭이면 안내 생략
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+            || window.navigator.standalone === true;
+        if (isIOS && !standalone) return;
+
+        setTimeout(showPushOptInModal, 1500);   // 앱이 뜨고 잠깐 뒤에 노출
+    } catch (_) {}
+}
+
+function showPushOptInModal() {
+    if (localStorage.getItem(PUSH_ASKED_KEY)) return;
+    document.getElementById('modal-title').textContent = '알림 받기';
+    document.getElementById('modal-body').innerHTML = `
+      <div style="text-align:center;padding:8px 4px 4px;">
+        <div style="font-size:42px;line-height:1;margin-bottom:14px;">🔔</div>
+        <div style="font-size:15px;font-weight:800;color:#111827;margin-bottom:8px;">중요한 일정을 놓치지 마세요</div>
+        <div style="font-size:13px;color:#6b7280;line-height:1.7;">
+          고객 <b style="color:#374151;">미팅·본계약 1시간 전</b>,<br>
+          <b style="color:#374151;">잔금·입주 당일</b>에 알림을 보내드립니다.
+        </div>
+        <div style="margin-top:14px;padding:10px 12px;background:#f8faff;border-radius:10px;font-size:12px;color:#6b7280;line-height:1.6;">
+          ‘알림 켜기’를 누르면 브라우저 알림 권한을 요청합니다.<br>나중에 설정에서 언제든 끌 수 있어요.
+        </div>
+      </div>`;
+    document.getElementById('modal-footer').innerHTML = `
+      <button class="btn-secondary" onclick="declinePushOptIn()">나중에</button>
+      <button class="btn-primary" onclick="acceptPushOptIn()">알림 켜기</button>`;
+    showModal();
+}
+
+async function acceptPushOptIn() {
+    localStorage.setItem(PUSH_ASKED_KEY, '1');
+    closeModal();
+    await enablePush();          // ← 여기서 OS/브라우저 알림 권한 요청이 뜬다
+}
+
+function declinePushOptIn() {
+    localStorage.setItem(PUSH_ASKED_KEY, '1');
+    closeModal();
+}
+
+// 로드 시 서비스워커 등록 + 현재 푸시 구독 상태 확인 + 최초 1회 안내
+try {
+    registerServiceWorker().then(async () => {
+        _pushEnabled = await pushIsEnabled();
+        maybeAskPushOnFirstVisit();
+    });
+} catch (_) {}
 
 // =====================================================
 // 알림 목록 (상단바 벨 버튼)
@@ -2003,7 +2085,7 @@ function agencySectionHTML(p) {
       <div class="oa-row">
         <span class="oa-row-ic">${icon(ic, 15)}</span>
         ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g, ''))}" class="oa-tel">${escapeHtml(val)}</a>`
-            : `<span>${escapeHtml(val)}</span>`}
+        : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
       <div class="oa-agency">
@@ -2023,7 +2105,7 @@ function agencyCardHTML(p) {
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;">
         <span style="color:#1a56db;display:inline-flex;">${icon(ic, 15)}</span>
         ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g,''))}" style="color:#1a56db;text-decoration:none;font-weight:600;">${escapeHtml(val)}</a>`
-                : `<span>${escapeHtml(val)}</span>`}
+        : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
       <div style="margin-bottom:12px;padding:12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;text-align:left;">
