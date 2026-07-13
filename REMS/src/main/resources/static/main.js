@@ -3332,7 +3332,7 @@ function openCustomerForm(id, prefill) {
       </div>
 
       <div style="margin:6px 2px 8px;padding-top:12px;border-top:1px solid #f1f3f5;font-size:13px;font-weight:800;color:#111827;">일정 알림 <span style="font-weight:400;color:#9ca3af;font-size:12px;">· 입력하면 자동으로 푸시 알림</span></div>
-      <div class="form-row">
+      <div class="form-row form-row-datetime">
         <div class="form-group"><label class="form-label">미팅 일시</label>
           <input id="cf-meetingAt" class="form-input" type="datetime-local" value="${dtLocal('meetingAt')}"></div>
         <div class="form-group"><label class="form-label">본계약 일시</label>

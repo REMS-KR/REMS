@@ -313,6 +313,55 @@ html:not(.mode-web) #bottom-sheet[data-mode="tab"] { height: 88vh; height: 88dvh
 .form-input, .form-select, .form-textarea { min-width: 0; max-width: 100%; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .form-row > * { min-width: 0; }   /* 그리드 칼럼이 number/date 인풋 고유너비로 넘쳐 가로 스크롤 생기는 것 방지 */
+
+/* ===== iOS(사파리) 날짜/시간 입력 폭 보정 =====
+   iOS 는 date/datetime-local 에 자체 UI 를 넣어 고유 너비가 생기고,
+   width:100% 를 줘도 컨테이너를 넘쳐 잘려 보인다. 아래로 강제 고정한다. */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"],
+input[type="month"] {
+    -webkit-appearance: none;
+    appearance: none;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    /* iOS 는 내부 값이 기본 중앙/좌측 정렬되며 여백이 커진다 → 높이/여백 통일 */
+    min-height: 42px;
+    line-height: 1.2;
+    text-align: left;
+    background-clip: padding-box;
+}
+/* iOS 는 값이 비어있어도 자리표시자 영역을 차지 → 내부 콘텐츠가 넘치지 않게 */
+input[type="date"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value,
+input[type="month"]::-webkit-date-and-time-value {
+    text-align: left;
+    min-width: 0;
+    width: 100%;          /* 내부 값 영역이 인풋 폭을 넘지 않도록 */
+    margin: 0;
+}
+input[type="datetime-local"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-datetime-edit {
+    padding: 0;
+    min-width: 0;
+    overflow: hidden;     /* 좁은 폭에서 잘림 대신 컨테이너 유지 */
+}
+/* 달력 아이콘이 여백을 더 먹지 않도록 */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    margin-left: 4px;
+    padding: 0;
+    flex-shrink: 0;
+}
+/* datetime-local 은 '날짜+시각'이라 2열 그리드에서 특히 좁다.
+   좁은 화면에서는 한 줄에 하나씩 배치해 잘리지 않게 한다. */
+@media (max-width: 480px) {
+    .form-row.form-row-datetime { grid-template-columns: 1fr; }
+    input[type="datetime-local"] { font-size: 14px; }
+}
 .form-section-title {
     font-size: 13px; font-weight: 700; color: var(--blue);
     text-transform: uppercase; letter-spacing: 0.5px;
@@ -1307,55 +1356,3 @@ html.mode-web #modal {
 #app.picker-active #call-parse-float { opacity: 0; pointer-events: none; transform: scale(0.85); }
 /* 웹(데스크톱) 레이아웃 — + 버튼 24px 기준 위 */
 html.mode-web #call-parse-float { right: 18px; bottom: 78px; }
-
-/* =====================================================================
- * 계약자 · 고객 카드 재구성 — main.css 맨 아래에 붙여넣기
- * (기존 .tenant-card 컨테이너는 그대로 재사용하고, 내부 레이아웃만 교체)
- * ===================================================================== */
-
-/* 헤드라인 줄: 한줄 요약(좌) + 배지(우) */
-.cust-headline-row {
-    display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
-}
-.cust-headline {
-    font-size: 14.5px; font-weight: 800; color: var(--gray-900);
-    line-height: 1.45; letter-spacing: -0.2px;
-    display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
-    overflow: hidden; text-overflow: ellipsis;
-}
-.cust-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.cust-badge {
-    font-size: 12px; font-weight: 800; padding: 2px 9px;
-    border-radius: 999px; white-space: nowrap;
-}
-.cust-badge-link { background: #e0edff; color: #1e40af; }
-
-/* ② 전화번호 · 이름 (가로 한 줄) */
-.cust-idrow {
-    display: flex; align-items: center; gap: 6px;
-    margin-top: 8px; flex-wrap: wrap;
-}
-.cust-phone {
-    display: inline-flex; align-items: center; gap: 4px;
-    font-size: 13px; font-weight: 700; color: var(--gray-700);
-}
-.cust-dot { color: var(--gray-300); font-weight: 700; }
-.cust-name { font-size: 13px; font-weight: 700; color: var(--gray-900); }
-.cust-meeting {
-    margin-left: auto; font-size: 12px; font-weight: 700; color: #1e40af;
-}
-
-/* ③ 요약 전문 */
-.cust-summary {
-    margin-top: 8px; font-size: 12.5px; line-height: 1.6;
-    color: var(--gray-600); white-space: pre-wrap; word-break: break-word;
-}
-
-/* 보조 메타 (금액·위치·입주) */
-.cust-meta {
-    margin-top: 6px; font-size: 11.5px; font-weight: 600; color: var(--gray-400);
-}
-
-/* 계약자 카드 전용 — 가격/기간 정렬 */
-.cust-card .tenant-price { font-size: 13px; font-weight: 800; color: var(--blue); letter-spacing: -0.2px; }
-.cust-tenant-period { margin-left: 8px; font-size: 11.5px; color: var(--gray-400); font-weight: 600; }
