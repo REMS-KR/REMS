@@ -3779,15 +3779,14 @@ function renderCustPickerRows(customerId) {
         const already = linked.has(String(b.id));
         const nm = b.name || b.address || ('매물 #' + b.id);
         const s = ((b.name || '') + ' ' + (b.address || '')).toLowerCase();
-        return `<div class="cust-pick-row" data-s="${escapeHtml(s)}" ${already ? '' : `onclick="attachCustomerBuilding('${customerId}','${b.id}')"`}
-             style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid ${already ? '#dbeafe' : '#eef1f5'};border-radius:9px;margin-bottom:6px;background:${already ? '#f8fbff' : '#fff'};${already ? '' : 'cursor:pointer;'}">
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(nm)}</div>
-            ${b.address ? `<div style="font-size:11.5px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(b.address)}</div>` : ''}
+        return `<div class="cust-pick-row${already ? ' is-linked' : ''}" data-s="${escapeHtml(s)}" ${already ? '' : `onclick="attachCustomerBuilding('${customerId}','${b.id}')"`}>
+          <div class="cust-pick-main">
+            <div class="cust-pick-name">${escapeHtml(nm)}</div>
+            ${b.address ? `<div class="cust-pick-addr">${escapeHtml(b.address)}</div>` : ''}
           </div>
           ${already
-            ? `<span style="flex-shrink:0;display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:800;color:#16a34a;">${icon('check', 14)} 연결됨</span>`
-            : `<span style="flex-shrink:0;font-size:12px;font-weight:800;color:#1a56db;">추가</span>`}
+            ? `<span class="cust-pick-act linked">${icon('check', 14)} 연결됨</span>`
+            : `<span class="cust-pick-act add">추가</span>`}
         </div>`;
     }).join('') || `<div style="padding:20px;text-align:center;color:#9ca3af;font-size:13px;">등록된 매물이 없습니다</div>`;
 
