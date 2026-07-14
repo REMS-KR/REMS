@@ -2341,7 +2341,7 @@ function agencyCardHTML(p) {
                 : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
-      <div style="margin-bottom:12px;padding:12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;text-align:left;">
+      <div style="width:100%;box-sizing:border-box;margin:10px 0 2px;padding:14px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;text-align:left;">
         <div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:#6b7280;margin-bottom:8px;">
           ${icon('agency',14)} 공인중개사사무소
         </div>
@@ -3757,7 +3757,7 @@ function officeCardHTML() {
         : '코드를 만들거나, 받은 코드로 참여하세요';
     return `
     <button type="button" onclick="openOfficeModal()"
-      style="width:100%;margin:10px 0 2px;padding:14px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;cursor:pointer;
+      style="width:100%;box-sizing:border-box;margin:10px 0 2px;padding:14px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;cursor:pointer;
              display:flex;align-items:center;gap:10px;text-align:left;font-family:inherit;">
       <div style="flex:1;min-width:0;">
         <div style="font-size:13px;font-weight:800;color:#111827;margin-bottom:3px;display:flex;align-items:center;gap:6px;">${icon('building', 15)} 사무소 매물 공유</div>
@@ -3885,14 +3885,13 @@ function showSettingsView() {
 
       <!-- name 값 -->
       <div class="profile-name">${escapeHtml(name)}</div>
-      ${me.email ? `<div class="profile-sub">${escapeHtml(me.email)}</div>` : ''}
 
       <!-- [B] edit by smsong - 내 공인중개사사무소 정보 요약 -->
       ${agencyCardHTML(me) || (isBroker() ? `<div style="margin:6px 0 2px;font-size:12.5px;color:#9ca3af;">공인중개사사무소 정보가 없습니다. ‘내 정보 수정’에서 등록하세요.</div>` : '')}
       <!-- [E] edit by smsong -->
 
       ${isBroker() ? officeCardHTML() : ''}
-      ${isBroker() ? `<div id="push-card" style="width:100%;margin:10px 0 2px;padding:14px;border:1px solid #e5e7eb;border-radius:14px;text-align:left;background:#fff;">${pushCardHTML()}</div>` : ''}
+      ${isBroker() ? `<div id="push-card" style="width:100%;box-sizing:border-box;margin:10px 0 2px;padding:14px;border:1px solid #e5e7eb;border-radius:14px;text-align:left;background:#fff;">${pushCardHTML()}</div>` : ''}
 
 
       <input type="file" id="profile-file" accept="image/*" style="display:none" onchange="changeProfilePhoto(event)">
