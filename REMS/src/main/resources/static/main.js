@@ -582,6 +582,62 @@ const _ownerCache = {};
 // [B] edit by smsong - 소유자 식별자 추출/비교 견고화
 // 백엔드가 등록자 식별자를 어떤 필드명(ownerUid/uid/ownerId/writerUid/owner/user_id)으로,
 // 또 uid(문자열) 혹은 id(숫자) 중 무엇으로 내려도 "내 매물"을 올바르게 판별하도록 함.
+// =====================================================
+// 전화번호 유틸 (표시 포맷 · 입력 마스킹 · 검증)
+// =====================================================
+function phoneDigits(v) {
+    return String(v || '').replace(/\D/g, '');
+}
+// 숫자열 → 하이픈 형식 (휴대폰 010-1234-5678 / 서울 02-123-4567 / 지역 031-123-4567 / 대표 1588-1234)
+function formatPhone(v) {
+    let d = phoneDigits(v);
+    if (!d) return '';
+    if (d.startsWith('82')) d = '0' + d.slice(2);      // +82 → 0 정규화
+
+    if (d.startsWith('02')) {                           // 서울
+        if (d.length <= 2) return d;
+        if (d.length <= 5) return d.slice(0, 2) + '-' + d.slice(2);
+        if (d.length <= 9) return d.slice(0, 2) + '-' + d.slice(2, 5) + '-' + d.slice(5);
+        return d.slice(0, 2) + '-' + d.slice(2, 6) + '-' + d.slice(6, 10);
+    }
+    if (/^1[568]\d{2}/.test(d)) {                       // 대표번호 15xx/16xx/18xx (8자리)
+        if (d.length <= 4) return d;
+        return d.slice(0, 4) + '-' + d.slice(4, 8);
+    }
+    if (d.length <= 3) return d;                        // 010 등 3자리 국번
+    if (d.length <= 7) return d.slice(0, 3) + '-' + d.slice(3);
+    if (d.length <= 10) return d.slice(0, 3) + '-' + d.slice(3, 6) + '-' + d.slice(6);
+    return d.slice(0, 3) + '-' + d.slice(3, 7) + '-' + d.slice(7, 11);
+}
+// 유효한 전화번호인지 (빈값 판단은 호출부에서)
+function isValidPhone(v) {
+    const d = phoneDigits(v);
+    if (!d) return false;
+    if (d.startsWith('02')) return d.length === 9 || d.length === 10;
+    if (/^1[568]\d{2}$/.test(d.slice(0, 4)) && d.length === 8) return true;
+    return d.length === 10 || d.length === 11;
+}
+// input 실시간 마스킹 — 숫자만 허용, 하이픈 자동, 최대 자릿수 초과 차단
+function bindPhoneInput(el) {
+    if (!el || el._phoneBound) return;
+    el._phoneBound = true;
+    el.setAttribute('inputmode', 'numeric');
+    el.value = formatPhone(el.value);
+    el.addEventListener('input', () => {
+        const atEnd = el.selectionStart === el.value.length;
+        let d = phoneDigits(el.value);
+        const max = d.startsWith('02') ? 10 : 11;   // 초과 입력 차단
+        if (d.length > max) d = d.slice(0, max);
+        el.value = formatPhone(d);
+        if (atEnd) el.selectionStart = el.selectionEnd = el.value.length;
+    });
+    el.addEventListener('blur', () => { el.value = formatPhone(el.value); });
+}
+// 폼이 그려진 뒤 호출 — 전화번호 인풋 전체에 마스킹 적용
+function bindPhoneInputs(root) {
+    (root || document).querySelectorAll('input[type="tel"]').forEach(bindPhoneInput);
+}
+
 function ownerIdOf(obj) {
     if (!obj) return '';
     const v = obj.ownerUid ?? obj.uid ?? obj.userUid ?? obj.ownerId ?? obj.writerUid ?? obj.owner ?? obj.user_id ?? obj.userId;
@@ -2317,7 +2373,7 @@ function agencySectionHTML(p) {
     const row = (ic, val, isTel) => val ? `
       <div class="oa-row">
         <span class="oa-row-ic">${icon(ic, 15)}</span>
-        ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g, ''))}" class="oa-tel">${escapeHtml(val)}</a>`
+        ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g, ''))}" class="oa-tel">${escapeHtml(formatPhone(val))}</a>`
             : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
@@ -2337,7 +2393,7 @@ function agencyCardHTML(p) {
     const row = (ic, val, isTel) => val ? `
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;">
         <span style="color:#1a56db;display:inline-flex;">${icon(ic, 15)}</span>
-        ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g,''))}" style="color:#1a56db;text-decoration:none;font-weight:600;">${escapeHtml(val)}</a>`
+        ${isTel ? `<a href="tel:${escapeHtml(String(val).replace(/[^0-9+]/g,''))}" style="color:#1a56db;text-decoration:none;font-weight:600;">${escapeHtml(formatPhone(val))}</a>`
                 : `<span>${escapeHtml(val)}</span>`}
       </div>` : '';
     return `
@@ -3276,7 +3332,7 @@ function renderTenantList() {
             <div class="tenant-bldg">${t.name ? `<span style="color:#111827;">${escapeHtml(t.name)}</span> · ` : ''}${escapeHtml(t.buildingName || '건물 미입력')}${t.unitName ? ` <span class="tenant-unit">${escapeHtml(t.unitName)}</span>` : ''}</div>
             <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
               ${dd ? `<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:${dd.bg};color:${dd.fg};">${dd.text}</span>` : ''}
-              <span class="tenant-phone">${icon('phone', 13)} ${escapeHtml(t.phone || '-')}</span>
+              <span class="tenant-phone">${icon('phone', 13)} ${escapeHtml(formatPhone(t.phone) || '-')}</span>
             </div>
           </div>
           <div class="tenant-meta">
@@ -3304,7 +3360,7 @@ function showTenantDetail(id) {
     document.getElementById('modal-body').innerHTML = `
       ${dd ? `<div style="margin-bottom:10px;"><span style="font-size:12px;font-weight:800;padding:3px 11px;border-radius:999px;background:${dd.bg};color:${dd.fg};">${dd.text}</span></div>` : ''}
       ${row('이름', t.name)}
-      ${row('전화번호', t.phone)}
+      ${row('전화번호', formatPhone(t.phone))}
       ${row('건물 · 호실', (t.buildingName || '') + (t.unitName ? ' ' + t.unitName : '') || '-')}
       ${row('금액', price)}
       ${row('계약기간', period)}
@@ -3331,7 +3387,7 @@ function openTenantForm(id, prefill) {
       </div>`;
     document.getElementById('modal-body').innerHTML = `
       ${f('이름', 'tf-name', t ? t.name : '', '예: 홍길동')}
-      ${f('전화번호', 'tf-phone', t ? t.phone : '', '010-0000-0000', 'tel')}
+      ${f('전화번호', 'tf-phone', t ? formatPhone(t.phone) : '', '010-0000-0000', 'tel')}
       ${f('건물명', 'tf-bldg', t ? t.buildingName : '', '예: 강남빌딩')}
       ${f('호실', 'tf-unit', t ? t.unitName : '', '예: 201호')}
       <div class="form-row">
@@ -3356,9 +3412,10 @@ async function saveTenant(id) {
     const phone = document.getElementById('tf-phone').value.trim();
     const buildingName = document.getElementById('tf-bldg').value.trim();
     if (!phone && !buildingName) { showToast('전화번호 또는 건물명을 입력하세요'); return; }
+    if (phone && !isValidPhone(phone)) { showToast('전화번호 형식이 올바르지 않습니다 (예: 010-1234-5678)'); return; }
     const dto = {
         name: document.getElementById('tf-name').value.trim(),
-        phone,
+        phone: phone ? formatPhone(phone) : '',
         buildingName,
         unitName: document.getElementById('tf-unit').value.trim(),
         deposit: parseInt(document.getElementById('tf-deposit').value) || 0,
@@ -3471,7 +3528,7 @@ function renderCustomerList() {
             </div>
           </div>
           <div class="tenant-meta">
-            <span class="tenant-phone">${icon('phone', 13)} ${escapeHtml(c.phone || '-')}</span>
+            <span class="tenant-phone">${icon('phone', 13)} ${escapeHtml(formatPhone(c.phone) || '-')}</span>
             ${bits.length ? `<span class="tenant-period">${bits.join(' · ')}</span>` : ''}
             ${c.meetingDate ? `<span style="margin-left:auto;font-size:12px;font-weight:700;color:#1e40af;">미팅 ${escapeHtml(c.meetingDate)}</span>` : ''}
           </div>
@@ -3494,7 +3551,7 @@ function showCustomerDetail(id) {
       ${s ? `<div style="margin-bottom:10px;"><span style="font-size:12px;font-weight:800;padding:3px 11px;border-radius:999px;background:${s.bg};color:${s.fg};">감도 ${s.label}</span></div>` : ''}
       ${row('이름', c.name)}
       ${c.summary ? `<div style="padding:10px 0;border-bottom:1px solid #f1f3f5;"><div style="color:#6b7280;font-size:13px;margin-bottom:5px;">AI 요약</div><div style="color:#111827;font-size:13px;line-height:1.6;white-space:pre-wrap;">${escapeHtml(c.summary)}</div></div>` : ''}
-      ${row('전화번호', c.phone)}
+      ${row('전화번호', formatPhone(c.phone))}
       ${row('금액', c.amount)}
       ${row('위치', c.location)}
       ${row('입주 희망일', c.moveInDate)}
@@ -3545,7 +3602,7 @@ function openCustomerForm(id, prefill) {
         <div style="display:flex;gap:6px;">${sBtn('high', '상')}${sBtn('mid', '중')}${sBtn('low', '하')}</div>
       </div>
       <div class="form-group"><label class="form-label">전화번호</label>
-        <input id="cf-phone" class="form-input" type="tel" placeholder="010-0000-0000" value="${v('phone')}"></div>
+        <input id="cf-phone" class="form-input" type="tel" placeholder="010-0000-0000" value="${escapeHtml(formatPhone(c && c.phone))}"></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">금액</label>
           <input id="cf-amount" class="form-input" type="text" placeholder="예: 매매 3억 / 보5000·월50" value="${v('amount')}"></div>
@@ -3616,6 +3673,8 @@ async function saveCustomer(id) {
         moveInOn: g('cf-moveInOn') || null
     };
     if (!dto.summary && !dto.phone) { showToast('AI 요약 또는 전화번호를 입력하세요'); return; }
+    if (dto.phone && !isValidPhone(dto.phone)) { showToast('전화번호 형식이 올바르지 않습니다 (예: 010-1234-5678)'); return; }
+    dto.phone = dto.phone ? formatPhone(dto.phone) : '';
     showLoading(id ? '고객 정보를 저장하는 중…' : '고객을 등록하는 중…');
     try {
         if (id) await Api.updateCustomer(id, dto);
@@ -3992,14 +4051,14 @@ function openProfileEdit() {
       ${field('pe-name', '이름', me.name, '실명')}
       ${field('pe-nickname', '닉네임', me.nickname, '닉네임')}
       ${field('pe-email', '이메일', me.email, 'example@email.com', 'email')}
-      ${field('pe-phone', '휴대폰', me.phone, '010-0000-0000', 'tel')}
+      ${field('pe-phone', '휴대폰', formatPhone(me.phone), '010-0000-0000', 'tel')}
       ${field('pe-address', '주소', me.address, '주소')}
       ${isBroker() ? `
       <div style="display:flex;align-items:center;gap:6px;margin:18px 0 10px;font-size:13px;font-weight:800;color:#1a56db;">
         ${icon('agency',16)} 공인중개사사무소 정보
       </div>
       ${field('pe-agency-name', '사무소 이름', me.agencyName, '○○공인중개사사무소')}
-      ${field('pe-agency-phone', '사무소 전화번호', me.agencyPhone, '02-000-0000', 'tel')}
+      ${field('pe-agency-phone', '사무소 전화번호', formatPhone(me.agencyPhone), '02-000-0000', 'tel')}
       ${field('pe-agency-address', '사무소 주소', me.agencyAddress, '사무소 주소')}
       ` : ''}
     `;
@@ -4036,6 +4095,15 @@ async function saveProfileEdit() {
         dto.agencyPhone = me.agencyPhone;
         dto.agencyAddress = me.agencyAddress;
     }
+    // 전화번호 검증 (입력한 경우에만) + 하이픈 형식으로 정규화
+    if (dto.phone && !isValidPhone(dto.phone)) {
+        showToast('휴대폰 번호 형식이 올바르지 않습니다 (예: 010-1234-5678)'); return;
+    }
+    if (dto.agencyPhone && !isValidPhone(dto.agencyPhone)) {
+        showToast('사무소 전화번호 형식이 올바르지 않습니다 (예: 02-123-4567)'); return;
+    }
+    dto.phone = dto.phone ? formatPhone(dto.phone) : dto.phone;
+    dto.agencyPhone = dto.agencyPhone ? formatPhone(dto.agencyPhone) : dto.agencyPhone;
     try {
         showLoading('내 정보를 저장하는 중…');
         const updated = await Api.updateUser(dto);   // 파일 없이 JSON 부분 업데이트
@@ -4379,6 +4447,8 @@ function showModal() {
     const mo = document.getElementById('modal-overlay');
     if (mo) mo.scrollTop = 0;
     document.getElementById('modal-overlay').classList.add('show');
+    // 폼 안의 전화번호 입력칸에 010-0000-0000 자동 포맷/숫자만 입력 적용
+    try { bindPhoneInputs(mo || document); } catch (_) {}
 }
 
 function closeModal() {
