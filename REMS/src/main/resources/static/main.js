@@ -637,6 +637,15 @@ function bindPhoneInput(el) {
 function bindPhoneInputs(root) {
     (root || document).querySelectorAll('input[type="tel"]').forEach(bindPhoneInput);
 }
+// 전화번호 → 탭하면 전화 걸리는 링크 (번호 없으면 fallback 텍스트)
+function telLink(v, fallback, style) {
+    const d = phoneDigits(v);
+    if (!d) return fallback === undefined ? '-' : fallback;
+    const label = formatPhone(v);
+    // 카드 클릭(상세 열기)과 겹치지 않도록 이벤트 전파 차단
+    return `<a href="tel:${escapeHtml(d)}" onclick="event.stopPropagation();"
+        style="color:#1a56db;text-decoration:none;font-weight:600;${style || ''}">${escapeHtml(label)}</a>`;
+}
 
 function ownerIdOf(obj) {
     if (!obj) return '';
@@ -3332,7 +3341,7 @@ function renderTenantList() {
             <div class="tenant-bldg">${t.name ? `<span style="color:#111827;">${escapeHtml(t.name)}</span> · ` : ''}${escapeHtml(t.buildingName || '건물 미입력')}${t.unitName ? ` <span class="tenant-unit">${escapeHtml(t.unitName)}</span>` : ''}</div>
             <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
               ${dd ? `<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:${dd.bg};color:${dd.fg};">${dd.text}</span>` : ''}
-              <span class="tenant-phone">${icon('phone', 13)} ${escapeHtml(formatPhone(t.phone) || '-')}</span>
+              <span class="tenant-phone">${icon('phone', 13)} ${telLink(t.phone, '-')}</span>
             </div>
           </div>
           <div class="tenant-meta">
@@ -3351,6 +3360,10 @@ function showTenantDetail(id) {
     const row = (label, val) => val ? `<div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #f1f3f5;">
         <span style="color:#6b7280;font-size:13px;flex-shrink:0;">${label}</span>
         <span style="color:#111827;font-size:13px;font-weight:600;text-align:right;word-break:break-all;">${escapeHtml(String(val))}</span></div>` : '';
+    // 값에 HTML(전화 링크 등)을 그대로 넣는 행
+    const rowHtml = (label, html) => html ? `<div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #f1f3f5;">
+        <span style="color:#6b7280;font-size:13px;flex-shrink:0;">${label}</span>
+        <span style="font-size:13px;font-weight:600;text-align:right;word-break:break-all;">${html}</span></div>` : '';
     const priceLine = (t.rent > 0)
         ? `보 ${(t.deposit || 0).toLocaleString()} / 월 ${t.rent.toLocaleString()}만`
         : `보증금 ${(t.deposit || 0).toLocaleString()}만`;
@@ -3360,7 +3373,7 @@ function showTenantDetail(id) {
     document.getElementById('modal-body').innerHTML = `
       ${dd ? `<div style="margin-bottom:10px;"><span style="font-size:12px;font-weight:800;padding:3px 11px;border-radius:999px;background:${dd.bg};color:${dd.fg};">${dd.text}</span></div>` : ''}
       ${row('이름', t.name)}
-      ${row('전화번호', formatPhone(t.phone))}
+      ${rowHtml('전화번호', t.phone ? telLink(t.phone) : '')}
       ${row('건물 · 호실', (t.buildingName || '') + (t.unitName ? ' ' + t.unitName : '') || '-')}
       ${row('금액', price)}
       ${row('계약기간', period)}
@@ -3528,7 +3541,7 @@ function renderCustomerList() {
             </div>
           </div>
           <div class="tenant-meta">
-            <span class="tenant-phone">${icon('phone', 13)} ${escapeHtml(formatPhone(c.phone) || '-')}</span>
+            <span class="tenant-phone">${icon('phone', 13)} ${telLink(c.phone, '-')}</span>
             ${bits.length ? `<span class="tenant-period">${bits.join(' · ')}</span>` : ''}
             ${c.meetingDate ? `<span style="margin-left:auto;font-size:12px;font-weight:700;color:#1e40af;">미팅 ${escapeHtml(c.meetingDate)}</span>` : ''}
           </div>
@@ -3547,11 +3560,15 @@ function showCustomerDetail(id) {
     const row = (label, val) => val ? `<div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #f1f3f5;">
         <span style="color:#6b7280;font-size:13px;flex-shrink:0;">${label}</span>
         <span style="color:#111827;font-size:13px;font-weight:600;text-align:right;word-break:break-all;white-space:pre-wrap;">${escapeHtml(String(val))}</span></div>` : '';
+    // 값에 HTML(전화 링크 등)을 그대로 넣는 행
+    const rowHtmlC = (label, html) => html ? `<div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #f1f3f5;">
+        <span style="color:#6b7280;font-size:13px;flex-shrink:0;">${label}</span>
+        <span style="font-size:13px;font-weight:600;text-align:right;word-break:break-all;">${html}</span></div>` : '';
     document.getElementById('modal-body').innerHTML = `
       ${s ? `<div style="margin-bottom:10px;"><span style="font-size:12px;font-weight:800;padding:3px 11px;border-radius:999px;background:${s.bg};color:${s.fg};">감도 ${s.label}</span></div>` : ''}
       ${row('이름', c.name)}
       ${c.summary ? `<div style="padding:10px 0;border-bottom:1px solid #f1f3f5;"><div style="color:#6b7280;font-size:13px;margin-bottom:5px;">AI 요약</div><div style="color:#111827;font-size:13px;line-height:1.6;white-space:pre-wrap;">${escapeHtml(c.summary)}</div></div>` : ''}
-      ${row('전화번호', formatPhone(c.phone))}
+      ${rowHtmlC('전화번호', c.phone ? telLink(c.phone) : '')}
       ${row('금액', c.amount)}
       ${row('위치', c.location)}
       ${row('입주 희망일', c.moveInDate)}
