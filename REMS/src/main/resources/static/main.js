@@ -1778,17 +1778,23 @@ async function openCustomerFromNoti(customerId) {
     _statsSubTab = 'customer';       // '고객 관리' 서브탭으로
     switchTab('stats');              // 임차인 관리 화면 진입 (고객 목록 렌더)
 
+    // 이미 캐시에 있으면 로딩 없이 바로 연다
+    if (_customers && _customers.find(x => x.id === id)) {
+        showCustomerDetail(id);
+        return;
+    }
+
     showLoading('고객 정보를 불러오는 중…');
     try {
-        if (!_customers || !_customers.length || !_customers.find(x => x.id === id)) {
-            await loadCustomers();   // 캐시에 없으면 새로 로드
-        }
+        await loadCustomers();
         const c = _customers.find(x => x.id === id);
         if (!c) { showToast('삭제되었거나 찾을 수 없는 고객입니다'); return; }
         showCustomerDetail(id);
     } catch (e) {
         showToast('불러오기 실패: ' + (e.message || ''));
-    } finally { hideLoading(); }
+    } finally {
+        hideLoading();
+    }
 }
 
 async function clearNotifications() {
@@ -4359,8 +4365,14 @@ function showToast(msg) {
 // =====================================================
 let _isSubmitting = false;
 
+// 로딩 표시 세대(generation) — hideLoading 이 먼저 실행돼도
+// 예약된 requestAnimationFrame 이 뒤늦게 'show' 를 다시 붙이지 않도록 무효화한다.
+let _loadingSeq = 0;
+let _loadingWatchdog = null;
+
 function showLoading(text) {
     _isSubmitting = true;
+    const seq = ++_loadingSeq;
     let el = document.getElementById('loading-overlay');
     if (!el) {
         el = document.createElement('div');
@@ -4374,11 +4386,21 @@ function showLoading(text) {
     }
     el.querySelector('.loading-text').textContent = text || '처리 중…';
     // 진행 중 클릭을 흡수 (캡처 단계에서 막아 버튼 onclick 도달 차단)
-    requestAnimationFrame(() => el.classList.add('show'));
+    requestAnimationFrame(() => {
+        // 이미 hideLoading 이 호출됐다면(세대 불일치) 표시하지 않는다 → 무한로딩 방지
+        if (seq === _loadingSeq && _isSubmitting) el.classList.add('show');
+    });
+    // 안전장치: 어떤 이유로든 hideLoading 이 누락되면 20초 후 자동 해제
+    if (_loadingWatchdog) clearTimeout(_loadingWatchdog);
+    _loadingWatchdog = setTimeout(() => {
+        if (seq === _loadingSeq) hideLoading();
+    }, 20000);
 }
 
 function hideLoading() {
     _isSubmitting = false;
+    _loadingSeq++;                     // 대기 중인 rAF 무효화
+    if (_loadingWatchdog) { clearTimeout(_loadingWatchdog); _loadingWatchdog = null; }
     const el = document.getElementById('loading-overlay');
     if (el) el.classList.remove('show');
 }
