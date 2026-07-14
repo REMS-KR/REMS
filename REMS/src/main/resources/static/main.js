@@ -3749,38 +3749,49 @@ function updateCustomerCache(dto) {
     if (i >= 0) _customers[i] = dto; else _customers.push(dto);
 }
 
-// 매물 선택 모달 (고객에게 연결할 건물 고르기)
+// 매물 선택 모달 (고객에게 연결할 건물 고르기) — 여러 건 연속 추가 가능
 function openCustomerBuildingPicker(customerId) {
     const c = _customers.find(x => x.id === String(customerId));
     const cname = (c && c.name && c.name.trim()) ? c.name.trim() : '고객';
-    const linked = new Set(((c && c.buildingIds) || []).map(String));
     document.getElementById('modal-title').textContent = `${cname}님에게 매물 추가`;
-
-    const all = (state.buildings || []);
-    const rows = all.map(b => {
-        const already = linked.has(String(b.id));
-        const nm = b.name || b.address || ('매물 #' + b.id);
-        const s = ((b.name || '') + ' ' + (b.address || '')).toLowerCase();
-        return `<div class="cust-pick-row" data-s="${escapeHtml(s)}" ${already ? '' : `onclick="attachCustomerBuilding('${customerId}','${b.id}')"`}
-             style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #eef1f5;border-radius:9px;margin-bottom:6px;${already ? 'opacity:.55;' : 'cursor:pointer;'}">
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(nm)}</div>
-            ${b.address ? `<div style="font-size:11.5px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(b.address)}</div>` : ''}
-          </div>
-          <span style="flex-shrink:0;font-size:12px;font-weight:800;color:${already ? '#9ca3af' : '#1a56db'};">${already ? '연결됨' : '추가'}</span>
-        </div>`;
-    }).join('');
 
     document.getElementById('modal-body').innerHTML = `
       <div class="form-group" style="margin-bottom:10px;">
         <input id="cust-pick-search" class="form-input" type="text" placeholder="건물명·주소 검색" oninput="filterCustPicker()">
       </div>
-      <div id="cust-pick-list">${rows || `<div style="padding:20px;text-align:center;color:#9ca3af;font-size:13px;">등록된 매물이 없습니다</div>`}</div>
+      <div id="cust-pick-list"></div>
     `;
-    document.getElementById('modal-footer').innerHTML = `
-      <button class="btn-secondary" onclick="showCustomerDetail('${customerId}')">← 뒤로</button>
-    `;
+    renderCustPickerRows(customerId);
+    // 하단 '뒤로' 버튼 제거 — 상단 X 로 닫으면 됨
+    document.getElementById('modal-footer').innerHTML = '';
     showModal();
+}
+
+// 선택 목록만 다시 그림 (검색어·스크롤 유지)
+function renderCustPickerRows(customerId) {
+    const box = document.getElementById('cust-pick-list');
+    if (!box) return;
+    const c = _customers.find(x => x.id === String(customerId));
+    const linked = new Set(((c && c.buildingIds) || []).map(String));
+    const all = (state.buildings || []);
+
+    box.innerHTML = all.map(b => {
+        const already = linked.has(String(b.id));
+        const nm = b.name || b.address || ('매물 #' + b.id);
+        const s = ((b.name || '') + ' ' + (b.address || '')).toLowerCase();
+        return `<div class="cust-pick-row" data-s="${escapeHtml(s)}" ${already ? '' : `onclick="attachCustomerBuilding('${customerId}','${b.id}')"`}
+             style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid ${already ? '#dbeafe' : '#eef1f5'};border-radius:9px;margin-bottom:6px;background:${already ? '#f8fbff' : '#fff'};${already ? '' : 'cursor:pointer;'}">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(nm)}</div>
+            ${b.address ? `<div style="font-size:11.5px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(b.address)}</div>` : ''}
+          </div>
+          ${already
+            ? `<span style="flex-shrink:0;display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:800;color:#16a34a;">${icon('check', 14)} 연결됨</span>`
+            : `<span style="flex-shrink:0;font-size:12px;font-weight:800;color:#1a56db;">추가</span>`}
+        </div>`;
+    }).join('') || `<div style="padding:20px;text-align:center;color:#9ca3af;font-size:13px;">등록된 매물이 없습니다</div>`;
+
+    filterCustPicker();   // 입력해둔 검색어가 있으면 계속 적용
 }
 
 function filterCustPicker() {
@@ -3790,6 +3801,7 @@ function filterCustPicker() {
     });
 }
 
+// 매물 연결 — 선택 화면에 그대로 머물러 여러 건 연속 추가
 async function attachCustomerBuilding(customerId, buildingId) {
     if (_isSubmitting) return;
     showLoading('매물을 연결하는 중…');
@@ -3798,7 +3810,7 @@ async function attachCustomerBuilding(customerId, buildingId) {
         updateCustomerCache(updated);
         if (document.getElementById('customer-list')) renderCustomerList();
         showToast('매물을 연결했습니다');
-        showCustomerDetail(String(customerId));   // 고객 상세로 복귀(갱신된 목록 반영)
+        renderCustPickerRows(String(customerId));   // 폼 유지 + 해당 행만 '연결됨'으로 갱신
     } catch (e) {
         showToast('연결 실패: ' + (e.message || ''));
     } finally {
@@ -3814,7 +3826,9 @@ async function detachCustomerBuilding(customerId, buildingId) {
         updateCustomerCache(updated);
         if (document.getElementById('customer-list')) renderCustomerList();
         showToast('매물 연결을 해제했습니다');
-        showCustomerDetail(String(customerId));
+        // 선택 화면에서 해제했으면 그 화면 유지, 고객 상세에서 해제했으면 상세 갱신
+        if (document.getElementById('cust-pick-list')) renderCustPickerRows(String(customerId));
+        else showCustomerDetail(String(customerId));
     } catch (e) {
         showToast('해제 실패: ' + (e.message || ''));
     } finally {
