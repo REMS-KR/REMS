@@ -106,24 +106,24 @@ public class CustomerNotificationScheduler {
             // ---- 미팅 ----
             if (!Boolean.TRUE.equals(c.getNotifiedMeeting()) && isDue(c.getMeetingAt(), s.getMeetingLead1(), now)) {
                 pushService.sendToUser(uid, "핵방노트",
-                        leadLabel(s.getMeetingLead1()) + " " + name + "님과 미팅이 있습니다", "meeting");
+                        leadLabel(s.getMeetingLead1()) + " " + name + "님과 미팅이 있습니다", "meeting", c.getId());
                 c.setNotifiedMeeting(true); sent++;
             }
             if (!Boolean.TRUE.equals(c.getNotifiedMeeting2()) && isDue(c.getMeetingAt(), s.getMeetingLead2(), now)) {
                 pushService.sendToUser(uid, "핵방노트",
-                        leadLabel(s.getMeetingLead2()) + " " + name + "님과 미팅이 있습니다", "meeting");
+                        leadLabel(s.getMeetingLead2()) + " " + name + "님과 미팅이 있습니다", "meeting", c.getId());
                 c.setNotifiedMeeting2(true); sent++;
             }
 
             // ---- 본계약 ----
             if (!Boolean.TRUE.equals(c.getNotifiedContract()) && isDue(c.getContractAt(), s.getContractLead1(), now)) {
                 pushService.sendToUser(uid, "핵방노트",
-                        leadLabel(s.getContractLead1()) + " " + name + "님 본계약이 있습니다", "contract");
+                        leadLabel(s.getContractLead1()) + " " + name + "님 본계약이 있습니다", "contract", c.getId());
                 c.setNotifiedContract(true); sent++;
             }
             if (!Boolean.TRUE.equals(c.getNotifiedContract2()) && isDue(c.getContractAt(), s.getContractLead2(), now)) {
                 pushService.sendToUser(uid, "핵방노트",
-                        leadLabel(s.getContractLead2()) + " " + name + "님 본계약이 있습니다", "contract");
+                        leadLabel(s.getContractLead2()) + " " + name + "님 본계약이 있습니다", "contract", c.getId());
                 c.setNotifiedContract2(true); sent++;
             }
 
@@ -131,13 +131,13 @@ public class CustomerNotificationScheduler {
             if (!Boolean.TRUE.equals(c.getNotifiedBalance())
                     && isDueDate(c.getBalanceOn(), s.getBalanceDay1(), s.getBalanceHour1(), now)) {
                 pushService.sendToUser(uid, "핵방노트",
-                        dayLabel(s.getBalanceDay1()) + " " + name + "님 잔금이 있습니다", "balance");
+                        dayLabel(s.getBalanceDay1()) + " " + name + "님 잔금이 있습니다", "balance", c.getId());
                 c.setNotifiedBalance(true); sent++;
             }
             if (!Boolean.TRUE.equals(c.getNotifiedBalance2())
                     && isDueDate(c.getBalanceOn(), s.getBalanceDay2(), s.getBalanceHour2(), now)) {
                 pushService.sendToUser(uid, "핵방노트",
-                        dayLabel(s.getBalanceDay2()) + " " + name + "님 잔금이 있습니다", "balance");
+                        dayLabel(s.getBalanceDay2()) + " " + name + "님 잔금이 있습니다", "balance", c.getId());
                 c.setNotifiedBalance2(true); sent++;
             }
 
@@ -145,13 +145,13 @@ public class CustomerNotificationScheduler {
             if (!Boolean.TRUE.equals(c.getNotifiedMoveIn())
                     && isDueDate(c.getMoveInOn(), s.getMoveInDay1(), s.getMoveInHour1(), now)) {
                 pushService.sendToUser(uid, "핵방노트",
-                        dayLabel(s.getMoveInDay1()) + " " + name + "님 입주가 있습니다", "movein");
+                        dayLabel(s.getMoveInDay1()) + " " + name + "님 입주가 있습니다", "movein", c.getId());
                 c.setNotifiedMoveIn(true); sent++;
             }
             if (!Boolean.TRUE.equals(c.getNotifiedMoveIn2())
                     && isDueDate(c.getMoveInOn(), s.getMoveInDay2(), s.getMoveInHour2(), now)) {
                 pushService.sendToUser(uid, "핵방노트",
-                        dayLabel(s.getMoveInDay2()) + " " + name + "님 입주가 있습니다", "movein");
+                        dayLabel(s.getMoveInDay2()) + " " + name + "님 입주가 있습니다", "movein", c.getId());
                 c.setNotifiedMoveIn2(true); sent++;
             }
         }

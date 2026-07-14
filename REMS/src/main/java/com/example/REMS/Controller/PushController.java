@@ -97,6 +97,7 @@ public class PushController {
             m.put("title", n.getTitle());
             m.put("body", n.getBody());
             m.put("type", n.getType());
+            m.put("customerId", n.getCustomerId());
             m.put("read", Boolean.TRUE.equals(n.getReadFlag()));
             m.put("createdAt", n.getCreatedAt() != null
                     ? n.getCreatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() : null);

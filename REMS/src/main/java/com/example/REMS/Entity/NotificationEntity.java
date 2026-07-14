@@ -29,6 +29,8 @@ public class NotificationEntity {
 
     private String type;            // meeting / contract / balance / movein / test
 
+    private Long customerId;        // 관련 고객 id (클릭 시 해당 고객 상세로 이동)
+
     @Builder.Default
     private Boolean readFlag = false;   // 읽음 여부
 

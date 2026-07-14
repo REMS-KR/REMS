@@ -79,12 +79,19 @@ public class PushService {
     /** type: meeting/contract/balance/movein/test — 알림 목록 분류용 */
     @Transactional
     public void sendToUser(String uid, String title, String body, String type) {
+        sendToUser(uid, title, body, type, null);
+    }
+
+    /** customerId: 알림 클릭 시 이동할 고객 id (없으면 null) */
+    @Transactional
+    public void sendToUser(String uid, String title, String body, String type, Long customerId) {
         if (uid == null) return;
 
         // 1) 알림 이력 저장 (푸시 미설정/미구독이어도 앱 '알림' 목록에는 남는다)
         try {
             notificationRepository.save(com.example.REMS.Entity.NotificationEntity.builder()
-                    .uid(uid).title(title).body(body).type(type).readFlag(false).build());
+                    .uid(uid).title(title).body(body).type(type)
+                    .customerId(customerId).readFlag(false).build());
         } catch (Exception e) {
             logger.warn("알림 이력 저장 실패 - uid={}", uid, e);
         }
@@ -99,6 +106,8 @@ public class PushService {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("title", title);
             m.put("body", body);
+            m.put("type", type);
+            if (customerId != null) m.put("customerId", customerId);   // SW 가 클릭 시 사용
             payload = om.writeValueAsString(m);
         } catch (Exception e) {
             payload = "{\"title\":\"핵방노트\",\"body\":\"" + (body == null ? "" : body) + "\"}";

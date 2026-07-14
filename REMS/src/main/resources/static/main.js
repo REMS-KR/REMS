@@ -1750,7 +1750,10 @@ function renderNotifications(list) {
     body.innerHTML = list.map(n => {
         const meta = NOTI_ICONS[n.type] || { icon: 'bell', label: '', fg: '#6b7280', bg: '#f3f4f6' };
         const unread = !n.read;
-        return `<div style="display:flex;gap:10px;padding:12px 10px;border-bottom:1px solid #f1f3f5;${unread ? 'background:#f8faff;' : ''}border-radius:8px;">
+        const cid = n.customerId;
+        const clickable = cid != null;
+        return `<div ${clickable ? `onclick="openCustomerFromNoti('${cid}')"` : ''}
+            style="display:flex;gap:10px;padding:12px 10px;border-bottom:1px solid #f1f3f5;${unread ? 'background:#f8faff;' : ''}border-radius:8px;${clickable ? 'cursor:pointer;' : ''}">
           <span style="flex-shrink:0;width:32px;height:32px;border-radius:9px;background:${meta.bg};color:${meta.fg};display:inline-flex;align-items:center;justify-content:center;">${icon(meta.icon, 16)}</span>
           <div style="flex:1;min-width:0;">
             <div style="font-size:13.5px;font-weight:700;color:#111827;line-height:1.5;">${escapeHtml(n.body || '')}</div>
@@ -1759,10 +1762,33 @@ function renderNotifications(list) {
             </div>
           </div>
           ${unread ? `<span style="flex-shrink:0;width:7px;height:7px;border-radius:50%;background:#1a56db;margin-top:6px;"></span>` : ''}
+          ${clickable ? `<span style="flex-shrink:0;color:#d1d5db;align-self:center;">${icon('back', 15, 'transform:rotate(180deg);')}</span>` : ''}
         </div>`;
     }).join('');
     document.getElementById('modal-footer').innerHTML = `
       <button class="btn-secondary" style="width:100%;color:#ef4444;" onclick="clearNotifications()">알림 전체 삭제</button>`;
+}
+
+// 알림 → 해당 고객 상세로 이동 (임차인 관리 > 고객 관리 탭)
+async function openCustomerFromNoti(customerId) {
+    const id = String(customerId);
+    closeModal();
+    if (!isBroker()) { showToast('고객 정보를 볼 권한이 없습니다'); return; }
+
+    _statsSubTab = 'customer';       // '고객 관리' 서브탭으로
+    switchTab('stats');              // 임차인 관리 화면 진입 (고객 목록 렌더)
+
+    showLoading('고객 정보를 불러오는 중…');
+    try {
+        if (!_customers || !_customers.length || !_customers.find(x => x.id === id)) {
+            await loadCustomers();   // 캐시에 없으면 새로 로드
+        }
+        const c = _customers.find(x => x.id === id);
+        if (!c) { showToast('삭제되었거나 찾을 수 없는 고객입니다'); return; }
+        showCustomerDetail(id);
+    } catch (e) {
+        showToast('불러오기 실패: ' + (e.message || ''));
+    } finally { hideLoading(); }
 }
 
 async function clearNotifications() {
@@ -1781,8 +1807,21 @@ try {
     setInterval(refreshNotiBadge, 60000);
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.addEventListener('message', (e) => {
-            if (e.data && e.data.type === 'push-received') refreshNotiBadge();
+            const d = e.data || {};
+            if (d.type === 'push-received') refreshNotiBadge();
+            // OS 푸시 알림 클릭 → 앱이 이미 열려 있는 경우
+            if (d.type === 'open-customer' && d.customerId) {
+                openCustomerFromNoti(String(d.customerId));
+                refreshNotiBadge();
+            }
         });
+    }
+    // OS 푸시 알림 클릭으로 앱이 새로 열린 경우 (?customerId=123)
+    const _q = new URLSearchParams(location.search);
+    const _cid = _q.get('customerId');
+    if (_cid) {
+        history.replaceState(null, '', location.pathname);   // 주소창 정리(새로고침 시 재이동 방지)
+        setTimeout(() => openCustomerFromNoti(_cid), 900);   // 초기 로드(권한/목록) 후 이동
     }
 } catch (_) {}
 

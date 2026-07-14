@@ -38,7 +38,7 @@ self.addEventListener('push', (event) => {
     icon: 'icons/icon-192.png',
     badge: 'icons/icon-192.png',
     vibrate: [80, 40, 80],
-    data: { url: data.url || './' },
+    data: { url: data.url || './', customerId: data.customerId || null },
     tag: data.tag || undefined,
     renotify: !!data.tag
   };
@@ -52,13 +52,24 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || './';
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      for (const c of list) {
-        if ('focus' in c) return c.focus();
+  const d = event.notification.data || {};
+  const customerId = d.customerId || null;
+  const url = d.url || './';
+
+  event.waitUntil((async () => {
+    const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    // 이미 앱이 열려 있으면 포커스 후 고객 이동 메시지 전달
+    for (const c of list) {
+      if ('focus' in c) {
+        await c.focus();
+        c.postMessage({ type: 'open-customer', customerId });
+        return;
       }
-      if (self.clients.openWindow) return self.clients.openWindow(url);
-    })
-  );
+    }
+    // 앱이 닫혀 있으면 새로 열면서 쿼리로 전달 (메인이 읽어서 이동)
+    if (self.clients.openWindow) {
+      const target = customerId ? `main.html?customerId=${encodeURIComponent(customerId)}` : url;
+      await self.clients.openWindow(target);
+    }
+  })());
 });
