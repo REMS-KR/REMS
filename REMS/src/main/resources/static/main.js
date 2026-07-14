@@ -3550,9 +3550,13 @@ function renderCustomerList() {
 }
 
 // 고객 상세 (읽기 전용) — 편집/삭제/매물 추가 버튼은 가로로
-function showCustomerDetail(id) {
+function showCustomerDetail(id, keepScroll) {
     const c = _customers.find(x => x.id === String(id));
     if (!c) return;
+    _modalCloseAction = null;          // 고객 상세에서 X 를 누르면 그냥 닫힘
+    // 매물 연결 해제 등으로 다시 그릴 때 스크롤 위치 유지
+    const _mb = document.getElementById('modal-body');
+    const _keepTop = (keepScroll && _mb) ? _mb.scrollTop : null;
     const cname = (c.name && c.name.trim()) ? c.name.trim() : '고객';
     document.getElementById('modal-title').textContent = (c.name && c.name.trim()) ? c.name.trim()
         : ((c.summary && c.summary.trim()) ? c.summary.trim().slice(0, 30) : (c.phone || '고객'));
@@ -3592,10 +3596,16 @@ function showCustomerDetail(id) {
       </div>
     `;
     showModal();
+    // showModal 이 스크롤을 맨 위로 되돌리므로, 유지 요청 시 원래 위치로 복원
+    if (_keepTop != null) {
+        const mb = document.getElementById('modal-body');
+        if (mb) mb.scrollTop = _keepTop;
+    }
 }
 
 // 고객 추가/수정 폼 — prefill 있으면 신규 폼에 미리 채움(AI 초안). call-parse.js 에서도 호출.
 function openCustomerForm(id, prefill) {
+    _modalCloseAction = null;   // 편집 폼에서 X → 그냥 닫힘
     const c = id ? _customers.find(x => x.id === id) : (prefill || null);
     const isEdit = !!id;
     document.getElementById('modal-title').textContent = isEdit ? '고객 수정' : '고객 등록';
@@ -3762,8 +3772,9 @@ function openCustomerBuildingPicker(customerId) {
       <div id="cust-pick-list"></div>
     `;
     renderCustPickerRows(customerId);
-    // 하단 '뒤로' 버튼 제거 — 상단 X 로 닫으면 됨
+    // 하단 '뒤로' 버튼 제거 — X 로 닫으면 작업하던 고객 상세로 복귀
     document.getElementById('modal-footer').innerHTML = '';
+    _modalCloseAction = () => showCustomerDetail(String(customerId));
     showModal();
 }
 
@@ -3825,9 +3836,9 @@ async function detachCustomerBuilding(customerId, buildingId) {
         updateCustomerCache(updated);
         if (document.getElementById('customer-list')) renderCustomerList();
         showToast('매물 연결을 해제했습니다');
-        // 선택 화면에서 해제했으면 그 화면 유지, 고객 상세에서 해제했으면 상세 갱신
+        // 선택 화면에서 해제했으면 그 화면 유지, 고객 상세에서 해제했으면 상세를 스크롤 유지한 채 갱신
         if (document.getElementById('cust-pick-list')) renderCustPickerRows(String(customerId));
-        else showCustomerDetail(String(customerId));
+        else showCustomerDetail(String(customerId), true);
     } catch (e) {
         showToast('해제 실패: ' + (e.message || ''));
     } finally {
@@ -4481,7 +4492,21 @@ function showModal() {
     try { bindPhoneInputs(mo || document); } catch (_) {}
 }
 
+// 모달을 X/닫기로 닫을 때 한 번만 실행할 동작 (예: 매물 선택 → 고객 상세로 복귀)
+let _modalCloseAction = null;
+
 function closeModal() {
+    const act = _modalCloseAction;
+    _modalCloseAction = null;          // 1회성 — 먼저 비워 재귀 방지
+    if (typeof act === 'function') {
+        try { act(); return; } catch (_) { /* 실패 시 그냥 닫음 */ }
+    }
+    document.getElementById('modal-overlay').classList.remove('show');
+}
+
+// 모달을 실제로 닫기만 (복귀 동작 무시)
+function forceCloseModal() {
+    _modalCloseAction = null;
     document.getElementById('modal-overlay').classList.remove('show');
 }
 
