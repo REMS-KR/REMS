@@ -3341,7 +3341,7 @@ function renderTenantList() {
             <div class="tenant-bldg">${t.name ? `<span style="color:#111827;">${escapeHtml(t.name)}</span> · ` : ''}${escapeHtml(t.buildingName || '건물 미입력')}${t.unitName ? ` <span class="tenant-unit">${escapeHtml(t.unitName)}</span>` : ''}</div>
             <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
               ${dd ? `<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:${dd.bg};color:${dd.fg};">${dd.text}</span>` : ''}
-              <span class="tenant-phone">${icon('phone', 13)} ${telLink(t.phone, '-')}</span>
+              <span class="tenant-phone">${icon('phone', 13, t.phone ? 'color:#1a56db;' : '')} ${telLink(t.phone, '-')}</span>
             </div>
           </div>
           <div class="tenant-meta">
@@ -3541,7 +3541,7 @@ function renderCustomerList() {
             </div>
           </div>
           <div class="tenant-meta">
-            <span class="tenant-phone">${icon('phone', 13)} ${telLink(c.phone, '-')}</span>
+            <span class="tenant-phone">${icon('phone', 13, c.phone ? 'color:#1a56db;' : '')} ${telLink(c.phone, '-')}</span>
             ${bits.length ? `<span class="tenant-period">${bits.join(' · ')}</span>` : ''}
             ${c.meetingDate ? `<span style="margin-left:auto;font-size:12px;font-weight:700;color:#1e40af;">미팅 ${escapeHtml(c.meetingDate)}</span>` : ''}
           </div>
