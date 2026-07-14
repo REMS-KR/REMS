@@ -594,12 +594,43 @@ function myIds() {
         .map(String);
 }
 // 현재 로그인 사용자가 이 오브젝트(건물/호실)의 작성자인지 확인
+// (isMine = 관리 권한 판정용 → 본인 + 같은 사무소)
 function isMine(obj) {
     const owner = ownerIdOf(obj);
     if (!owner) return false;
     if (myIds().includes(owner)) return true;
     // 같은 사무소(공유 그룹) 소유 매물도 '내 것'처럼 관리 가능
     return !!(state.officeUids && state.officeUids.has(String(owner)));
+}
+
+// ===== 표시용 소유 구분 (배지) =====
+// 내가 직접 등록한 것인지 (사무소 공유 제외)
+function isOwnedByMe(obj) {
+    const owner = ownerIdOf(obj);
+    return !!owner && myIds().includes(owner);
+}
+// 내가 아닌, 같은 사무소 동료가 등록한 것인지
+function isOfficeMates(obj) {
+    const owner = ownerIdOf(obj);
+    if (!owner || myIds().includes(owner)) return false;
+    return !!(state.officeUids && state.officeUids.has(String(owner)));
+}
+// 같은 사무소 동료 이름 (없으면 '사무소')
+function officeMemberName(obj) {
+    const owner = ownerIdOf(obj);
+    const m = (state.officeMembers || []).find(x => String(x.uid) === String(owner));
+    if (!m) return '사무소';
+    return m.name || m.nickname || '사무소';
+}
+// 소유 배지 HTML — 내 매물 / 동료 이름
+function ownerBadgeHTML(obj) {
+    if (isOwnedByMe(obj)) {
+        return '<span style="font-size:10.5px;color:#1a56db;background:#e8f0fe;font-weight:700;padding:1px 7px;border-radius:10px;">내 매물</span>';
+    }
+    if (isOfficeMates(obj)) {
+        return `<span style="font-size:10.5px;color:#7c3aed;background:#f1ebfe;font-weight:700;padding:1px 7px;border-radius:10px;">${escapeHtml(officeMemberName(obj))}</span>`;
+    }
+    return '';
 }
 // [E] edit by smsong
 
@@ -2069,9 +2100,11 @@ function buildingListItemHTML(b) {
         <div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
           ${formatPriceLabel(b) ? `<span style="font-size:11.5px;color:#1a56db;font-weight:800;letter-spacing:-0.2px;">${formatPriceLabel(b)}</span>` : ''}
           <span style="font-size:11px;color:#6b7280;font-weight:700;">${TYPE_LABEL[b.type] || ''}</span>
-          ${isMine(b)
+          ${isOwnedByMe(b)
         ? '<span style="font-size:10.5px;color:#1a56db;background:#e8f0fe;font-weight:700;padding:1px 7px;border-radius:10px;">내 매물</span>'
-        : (ownerIdOf(b) ? `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10.5px;color:#6b7280;background:#f3f4f6;font-weight:600;padding:1px 7px;border-radius:10px;">${icon('lock', 11)} ${ownerNameSpan(b)}</span>` : '')}
+        : isOfficeMates(b)
+            ? `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10.5px;color:#7c3aed;background:#f1ebfe;font-weight:700;padding:1px 7px;border-radius:10px;">${icon('agency', 11)} ${escapeHtml(officeMemberName(b))}</span>`
+            : (ownerIdOf(b) ? `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10.5px;color:#6b7280;background:#f3f4f6;font-weight:600;padding:1px 7px;border-radius:10px;">${icon('lock', 11)} ${ownerNameSpan(b)}</span>` : '')}
           ${s.empty > 0 ? `<span style="font-size:11px;color:#dc2626;font-weight:600;">공실 ${s.empty}</span>` : ''}
           ${s.expiring > 0 ? `<span style="font-size:11px;color:#d97706;font-weight:600;">만기 ${s.expiring}</span>` : ''}
         </div>
@@ -2260,13 +2293,16 @@ async function hydrateOwnerCard(b) {
     const p = await fetchOwnerProfile(b);
     const name = (p && (p.name || p.nickname)) || '알 수 없음';
     // [E] edit by smsong
-    const mine = isMine(b);
+    const mine = isOwnedByMe(b);          // 내가 직접 등록한 경우에만 '나'
+    const mate = isOfficeMates(b);        // 같은 사무소 동료가 등록한 경우
     el.innerHTML = `
       <div class="oa-top">
         ${avatarHTML(p, 40)}
         <div style="min-width:0;flex:1;">
           <div class="owner-card-label">매물 등록자</div>
-          <div class="owner-card-name">${escapeHtml(name)}${mine ? '<span class="owner-you">나</span>' : ''}</div>
+          <div class="owner-card-name">${escapeHtml(name)}${mine
+            ? '<span class="owner-you">나</span>'
+            : (mate ? '<span class="owner-mate">같은 사무소</span>' : '')}</div>
         </div>
       </div>
       ${agencySectionHTML(p)}

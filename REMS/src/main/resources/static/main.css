@@ -947,6 +947,12 @@ html.mode-web #modal {
     flex-shrink: 0; font-size: 10px; font-weight: 700; color: var(--blue);
     background: var(--blue-light); padding: 1px 7px; border-radius: 999px;
 }
+/* 같은 사무소 동료가 등록한 매물 표시 */
+.owner-mate {
+    flex-shrink: 0; font-size: 10px; font-weight: 700; color: #7c3aed;
+    background: #f1ebfe; padding: 1px 7px; border-radius: 999px;
+    margin-left: 6px;
+}
 
 /* 설정 → 내 프로필 화면 */
 .profile-page {
